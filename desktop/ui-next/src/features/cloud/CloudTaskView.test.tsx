@@ -946,6 +946,49 @@ describe("CloudTaskView", () => {
   // 同样多——不把 running 也算进贴底依赖,刚发的那条就正好被顶到 composer
   // 后面(用户报障 2026-08-06,截图里被切掉的正是运行条那一条的高度)。
   // 几何在 happy-dom 里全 0,桩住 scrollHeight 才能断言贴底动作发生。
+  it.each(["full", "pane"] as const)("%s 云端消息区离底显示回到最新，点击贴底并恢复流式跟随", async (variant) => {
+    let pipe = "";
+    const listeners = stubShellWs((cmd, args) => {
+      if (cmd === "mc_task_info") return Promise.resolve({ id: `t-latest-${variant}`, status: "processing" });
+      if (cmd === "cloud_ws_open") pipe = String(args?.pipe ?? "");
+      return Promise.resolve({});
+    });
+    const { container } = renderCloud(<CloudTaskView task={{ id: `t-latest-${variant}`, status: "processing" }} variant={variant} />);
+    await waitFor(() => expect(pipe).not.toBe(""));
+    const push = (seq: number, text: string) => act(() => {
+      listeners.get(`ws-msg:${pipe}`)?.({ payload: JSON.stringify({ type: "user-input", seq, data: { content: b64encode(text) } }) });
+    });
+    push(1, "云端滚动测试");
+    await screen.findByText("云端滚动测试");
+    const log = container.querySelector("[data-chat-log]") as HTMLElement;
+    let height = 2000;
+    let top = 1500;
+    Object.defineProperties(log, {
+      scrollHeight: { configurable: true, get: () => height },
+      clientHeight: { configurable: true, value: 500 },
+      scrollTop: {
+        configurable: true,
+        get: () => top,
+        set: (value: number) => { top = Math.max(0, Math.min(value, height - 500)); },
+      },
+    });
+    fireEvent.scroll(log);
+    expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
+    fireEvent.wheel(log, { deltaY: -120 });
+    log.scrollTop = 1000;
+    fireEvent.scroll(log);
+    const button = await screen.findByRole("button", { name: "回到最新" });
+    expect(log.contains(button)).toBe(false);
+    fireEvent.click(button);
+    expect(log.scrollTop).toBe(1500);
+    expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
+
+    height = 2500;
+    push(2, "云端继续跟随");
+    await screen.findByText("云端继续跟随");
+    expect(log.scrollTop).toBe(2000);
+  });
+
   it("发出后运行条挂起时重新贴底(运行条撑高 footer 会压矮日志视口)", async () => {
     let wsPipe = "";
     const listeners = stubShellWs((cmd, args) => {

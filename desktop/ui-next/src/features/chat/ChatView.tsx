@@ -43,6 +43,7 @@ import { useDismiss } from "@/lib/util/useDismiss";
 import { LocalComposerHost, type LocalComposerHandle } from "./composer/LocalComposerHost";
 import { DetailModal } from "./DetailModal";
 import { LogList, type LogListHandle } from "./LogList";
+import { JumpToLatest } from "./JumpToLatest";
 import { OutlineNav, useOutlineEntries } from "./OutlineNav";
 import { TaskPanel } from "./TaskPanel";
 import { FilesPanel } from "@/features/files/FilesPanel";
@@ -508,6 +509,8 @@ export function ChatView({
     // 元素把视口拽住整整 3 秒(RESTORE_POLLS 轮询期)。旧 UI chat.tsx:640-665
     // 的 beforeApply 正是为此存在
     await loadEarlier(() => {
+      // 加载期间点了「回到最新」后，晚到的历史页不再接管滚动。
+      if (pinnedRef.current) return;
       const el = scrollRef.current;
       if (!el) return;
       const elTop = el.getBoundingClientRect().top;
@@ -534,6 +537,8 @@ export function ChatView({
   // 的明确意图,立即结束锚点恢复并重新贴底
   const followBottom = useCallback(() => {
     finishRestore();
+    window.clearTimeout(jumpTimer.current);
+    prependAnchor.current = null;
     pinnedRef.current = true;
     const el = scrollRef.current;
     if (el) setScrollTop(el, el.scrollHeight);
@@ -882,13 +887,14 @@ export function ChatView({
   // ensureLoaded 的 promise 延续仍会重新挂链——sid 不再匹配即作废,不许
   // 旧会话的跳转落到新会话的同号 seq 上
   const jumpWithRetry = (seq: number, sid: string, tries = 90) => {
-    if (metaIdRef.current !== sid) return;
+    if (metaIdRef.current !== sid || pinnedRef.current) return;
     if (jumpToSeq(seq) || tries <= 0) return;
     jumpTimer.current = window.setTimeout(() => jumpWithRetry(seq, sid, tries - 1), 32);
   };
   // onJump 必须引用稳定:OutlineNav 是 memo 的，大纲上千条时流式批次不能
   // 因回调身份变化把整个面板重建——实现走 ref 取最新,外壳 useCallback 恒定
   const onJumpImpl = (seq: number, offset?: number) => {
+    pinnedRef.current = false;
     if (jumpToSeq(seq)) return;
     const sid = meta.id;
     // 更早的提问还没加载:按它那一轮的 offset 精确补页再定位(session_history
@@ -1354,6 +1360,7 @@ export function ChatView({
       {/* 大纲导航格内同样在(2026-08-19 用户报障「大纲没了」:左缘浮轨,
           按格自适应) */}
       <OutlineNav entries={entries} activeSeq={activeSeq ?? undefined} onJump={onJump} />
+      <JumpToLatest scrollRef={scrollRef} sessionId={meta.id} enabled={!empty} onClick={followBottom} />
       </div>
 
       {/* 无上边线(2026-08-13 用户定案):composer 卡自带边框已是分界,

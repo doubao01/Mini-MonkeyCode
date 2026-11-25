@@ -29,6 +29,7 @@ import { useApprovalHotkeys } from "@/app/shortcuts";
 import { ErrorBar } from "@/features/chat/composer/composerKit";
 import { SendQueueList } from "@/features/chat/composer/SendQueueList";
 import { LogList, type LogListHandle } from "@/features/chat/LogList";
+import { JumpToLatest } from "@/features/chat/JumpToLatest";
 import { OutlineNav, useOutlineEntries } from "@/features/chat/OutlineNav";
 import { TaskPanel } from "@/features/chat/TaskPanel";
 import { useI18n } from "@/lib/i18n";
@@ -437,10 +438,11 @@ export function CloudTaskView({
       break;
     }
     await h.loadEarlier();
-    if (!anchor) return;
+    if (!anchor || pinnedRef.current) return;
     listRef.current?.ensureKey(anchor.key);
     let tries = 20;
     const restore = () => {
+      if (pinnedRef.current) return;
       const now = scrollRef.current;
       const visibleKey = listRef.current?.resolveKey(anchor!.key) ?? anchor!.key;
       const row = now
@@ -462,6 +464,13 @@ export function CloudTaskView({
     const el = scrollRef.current;
     if (!el || !h.cursor || h.loadingEarlier) return;
     if (el.scrollTop < AUTO_EARLIER_PX) void onLoadEarlier();
+  };
+
+  const followBottom = () => {
+    setJumpAnchor(null);
+    pinnedRef.current = true;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   };
 
   const send = () => {
@@ -807,6 +816,7 @@ export function CloudTaskView({
       )}
 
       {!pending && <OutlineNav entries={entries} activeSeq={activeAnchor ?? undefined} onJump={onJumpOutline} />}
+      <JumpToLatest scrollRef={scrollRef} sessionId={h.id} enabled={!pending && !showEmpty} onClick={followBottom} />
       </div>
 
       {/* 无上边线:与 ChatView composer 同款(2026-08-13 用户定案) */}

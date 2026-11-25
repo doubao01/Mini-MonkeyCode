@@ -873,6 +873,42 @@ describe("聊天视图", () => {
     await waitFor(() => expect(screen.getByText("帮我修 bug")).toBeTruthy());
   });
 
+  it.each(["full", "pane"] as const)("%s 消息区离底显示回到最新，点击贴底并恢复流式跟随", async (variant) => {
+    const meta = { ...META, id: `s-jump-latest-${variant}` };
+    const { emit } = stubShell();
+    const { container } = render(<ChatView meta={meta} variant={variant} />);
+    await screen.findByText("帮我修 bug");
+    const log = container.querySelector("[data-chat-log]") as HTMLElement;
+    let height = 2000;
+    let top = 1500;
+    Object.defineProperties(log, {
+      scrollHeight: { configurable: true, get: () => height },
+      clientHeight: { configurable: true, value: 500 },
+      scrollTop: {
+        configurable: true,
+        get: () => top,
+        set: (value: number) => { top = Math.max(0, Math.min(value, height - 500)); },
+      },
+    });
+    fireEvent.scroll(log);
+    expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
+    fireEvent.wheel(log, { deltaY: -120 });
+    log.scrollTop = 1000;
+    fireEvent.scroll(log);
+    const button = await screen.findByRole("button", { name: "回到最新" });
+    expect(log.contains(button)).toBe(false);
+    expect(button.querySelector("svg")).toBeTruthy();
+    fireEvent.click(button);
+    expect(log.scrollTop).toBe(1500);
+    expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
+
+    height = 2500;
+    act(() => emit(`frames:${meta.id}`, [{ type: "user-input", seq: 3, data: { content: b64encode("继续跟随") } }]));
+    await screen.findByText("继续跟随");
+    expect(log.scrollTop).toBe(2000);
+    expect(screen.queryByRole("button", { name: "回到最新" })).toBeNull();
+  });
+
   it("离底时收到模板选择请求会自动显露待交互卡片", async () => {
     const meta = { ...META, id: "s-template-reveal" };
     const { emit } = stubShell();
