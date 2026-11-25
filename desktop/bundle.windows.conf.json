@@ -10,7 +10,7 @@
     "resources": {
       "../browser-extension/dist": "browser-extension",
       "binaries/ohmyagent-linux": "./",
-      "../plugins/skills": "skills"
+      "../../skills": "skills"
     },
     "icon": [
       "icons/icon.ico",

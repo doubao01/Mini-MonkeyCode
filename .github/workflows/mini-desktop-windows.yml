@@ -94,6 +94,7 @@ jobs:
           New-Item -ItemType Directory -Force $out | Out-Null
           Copy-Item target/release/monkeycode-desktop.exe "$out/MonkeyCode++.exe"
           Copy-Item ../browser-extension/dist "$out/browser-extension" -Recurse
+          Copy-Item ../../skills "$out/skills" -Recurse
           Copy-Item CLOUD_BUILD.md "$out/README.md"
           $hash = (Get-FileHash "$out/MonkeyCode++.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
           "$hash  MonkeyCode++.exe" | Set-Content "$out/SHA256SUMS.txt" -Encoding utf8

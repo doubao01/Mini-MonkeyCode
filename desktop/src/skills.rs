@@ -128,10 +128,9 @@ pub struct SkillInfo {
     pub default_enabled: bool,
 }
 
-/// 内置技能目录:bundle 资源 + dev 回退(cargo run 无 bundle 资源时用
-/// 仓库根 plugins/ submodule(MonkeyCodeOfficialPlugins)的 skills/,与
-/// 打包源同一份;未初始化 submodule 则回 None = 只有用户技能,不算错)。
-/// 形态照抄 open_extension_dir 的双候选。
+/// 内置技能目录候选(按优先级):bundle resources -> exe 同目录 skills/ -> dev 仓库根。
+/// `--no-bundle` 绿色版把 skills/ 与 exe 并列分发,因此必须含 exe 同目录候选;
+/// 全部落空回 None = 只有用户技能。
 pub fn builtin_dir(app: &AppHandle) -> Option<PathBuf> {
     let mut candidates: Vec<PathBuf> = Vec::new();
     if let Ok(p) = app
@@ -140,7 +139,12 @@ pub fn builtin_dir(app: &AppHandle) -> Option<PathBuf> {
     {
         candidates.push(p);
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../plugins/skills"));
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            candidates.push(dir.join("skills"));
+        }
+    }
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills"));
     candidates.into_iter().find(|p| p.is_dir())
 }
 
