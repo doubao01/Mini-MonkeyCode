@@ -1481,8 +1481,8 @@ function WorkbenchList({
           {listActions}
         </div>
       )}
-      {/* 品牌行(2026-08-18 用户定案「tab 上方加品牌」;旧侧栏头同款
-          Brand = 字标 + work 徽标,自带逐节点拖拽区);非 mac 动作组住行尾
+      {/* 品牌行(2026-08-18 用户定案「tab 上方加品牌」;Brand = 字标,自带拖拽区;
+          「work」徽标已按要求删除);非 mac 动作组住行尾
           (chrome 行已省,见上) */}
       <div data-tauri-drag-region="" className={`flex items-center gap-2 ps-5 pt-1 pb-2 ${isMacShell() ? "pe-4" : "pe-2 min-h-10"}`}>
         <span data-tauri-drag-region="" className="flex min-w-0 flex-1 items-center gap-2 overflow-hidden">

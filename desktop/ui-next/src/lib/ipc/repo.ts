@@ -136,8 +136,17 @@ export async function repoChanges(id: string): Promise<RepoChangeSet> {
   }) : [], isGitRepo: r.is_git_repo ?? false };
 }
 
-/** 在系统文件管理器中定位路径(动作类:浏览器模式随 invoke 一起 reject)。 */
+/** 在系统文件管理器中定位路径(动作类:浏览器模式随 invoke 一起 reject)。
+ *  先按相对路径解析,若文件不存在则退回打开工作区根目录,避免因前后端 workdir 格式差异导致的"路径不存在"。 */
 export async function repoReveal(id: string, path: string): Promise<void> {
   const r = await call<{ ok?: boolean }>(id, "repo_reveal", { path });
-  if (r.error) throw new Error(r.error);
+  if (r.error) {
+    const msg = String(r.error);
+    // 若后端提示路径不存在,尝试不带相对路径再调一次(打开工作区根目录)
+    if (msg.includes("路径不存在") || msg.includes("The system cannot find the file")) {
+      const r2 = await call<{ ok?: boolean }>(id, "repo_reveal", { path: "" });
+      if (!r2.error) return;
+    }
+    throw new Error(msg);
+  }
 }

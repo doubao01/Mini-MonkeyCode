@@ -78,4 +78,23 @@ describe("repo_* 会话查询", () => {
     stubInvoke(() => Promise.reject(new Error("repo 查询超时(15s)")));
     await expect(repoFileDiff("s1", "a.txt")).rejects.toThrow("repo 查询超时(15s)");
   });
+
+  it("路径不存在时自动退回打开工作区根目录", async () => {
+    const calls: Array<{ cmd: string; args?: { id: string; kind: string; payload: { path: string } } }> = [];
+    stubInvoke((cmd, args) => {
+      calls.push({ cmd, args: args as { id: string; kind: string; payload: { path: string } } });
+      if (args?.kind === "repo_reveal" && (args.payload as { path: string })?.path === "gone.txt") {
+        return Promise.resolve({ error: "路径不存在: The system cannot find the file specified. (os error 2)" });
+      }
+      if (args?.kind === "repo_reveal" && (args.payload as { path: string })?.path === "") {
+        return Promise.resolve({ ok: true });
+      }
+      return Promise.resolve({ ok: true });
+    });
+    await repoReveal("s1", "gone.txt");
+    expect(calls.filter((c) => c.args?.kind === "repo_reveal")).toEqual([
+      { cmd: "session_call", args: { id: "s1", kind: "repo_reveal", payload: { path: "gone.txt" } } },
+      { cmd: "session_call", args: { id: "s1", kind: "repo_reveal", payload: { path: "" } } },
+    ]);
+  });
 });

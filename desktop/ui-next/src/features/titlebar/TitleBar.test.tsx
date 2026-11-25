@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { TitleBar } from "./TitleBar";
+import { Brand, TitleBar } from "./TitleBar";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -55,6 +55,14 @@ describe("自绘窗框条(Windows / Linux)", () => {
     for (const btn of container.querySelectorAll("button")) {
       expect(btn.hasAttribute("data-tauri-drag-region")).toBe(false);
     }
+    done();
+  });
+
+  it("Brand 只剩应用字标,不再渲染 work 徽标", () => {
+    const { done } = stubShell("Windows NT 10.0");
+    render(<Brand />);
+    expect(screen.getByText("MonkeyCode++")).toBeTruthy();
+    expect(screen.queryByText("work")).toBeNull();
     done();
   });
 

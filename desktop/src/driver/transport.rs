@@ -7,7 +7,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::io::{BufRead, BufReader, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::{Arc, Mutex as StdMutex};
@@ -237,6 +237,42 @@ fn preserve_crash_log(log: &std::path::Path) {
     }
 }
 
+/// 出厂全局规则。内容与产品说明一致(只对 OhMyAgent 生效,不碰 Claude Code),
+/// 用户可自行编辑或删除;壳只在文件缺失时补写一次,绝不覆盖用户已有内容。
+const DEFAULT_GLOBAL_RULE: &str = "# 全局规则(仅 OhMyAgent 生效)
+
+本文件位于 `<configDir>/ohmyagent/rules/`,只对本运行时生效。
+
+## 通用约定
+
+- 回复语言跟随用户最后一条实质性请求的语言,默认简体中文。
+- 结论先行:先给结果,再给依据;步骤可执行、命令可直接运行。
+- 不确定时说明不确定的部分,不编造路径、版本号或接口名。
+";
+
+/// 启动引擎前备好 `<configDir>/ohmyagent/rules/`:目录缺失就建,默认规则
+/// 文件缺失就写。全程尽力而为,失败只进日志不阻断启动(规则缺失只是少一层
+/// 约束,不该让整个引擎起不来)。
+fn ensure_engine_rules_dir(engine_dir: &Path) {
+    let rules_dir = engine_dir.join("rules");
+    if let Err(e) = std::fs::create_dir_all(&rules_dir) {
+        eprintln!(
+            "[desktop] 创建规则目录失败({}): {e}",
+            rules_dir.display()
+        );
+        return;
+    }
+    let default_rule = rules_dir.join("00-global.md");
+    if !default_rule.exists() {
+        if let Err(e) = std::fs::write(&default_rule, DEFAULT_GLOBAL_RULE) {
+            eprintln!(
+                "[desktop] 写入默认全局规则失败({}): {e}",
+                default_rule.display()
+            );
+        }
+    }
+}
+
 /// 启动失败的收尾:置 stopped(reader 据此不把随后的 EOF 当崩溃上报——
 /// 启动错误已由返回值外显,不能双报;flusher 也据此退出,否则它会永远
 /// 持有 Arc<Inner>)、关 stdin、杀掉并回收子进程。原样返回错误便于
@@ -300,6 +336,11 @@ impl OhmyDriver {
         // 目录先建好:本机分支 cwd 要用,WSL 分支 prepare 的 wslpath 要翻译它们
         std::fs::create_dir_all(&engine_dir)
             .map_err(|e| format!("创建引擎运行目录失败({}): {e}", engine_dir.display()))?;
+        // 引擎的规则加载器逐目录探测 <configDir>/rules(internal/rules.(*Loader).scanDir),
+        // 目录不存在时每次启动都打一串 "cannot inspect ... The system cannot find the
+        // file specified",设置页规则分区也恒为空。壳负责把目录与出厂全局规则备好:
+        // 已存在就不碰(用户改过的规则必须保留),只在缺失时写入。
+        ensure_engine_rules_dir(&engine_dir);
         // 旧版 Desktop 把会话启用集写到全局 user skills 目录。新版 Agent
         // 使用 sessions/<id>/skills;旧派生目录残留会以 user 级重新对所有
         // 会话可见。清理失败只是多背旧技能集一轮,不阻断启动(与上方

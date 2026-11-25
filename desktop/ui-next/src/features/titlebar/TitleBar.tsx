@@ -74,22 +74,15 @@ function useWindowBlurred(): boolean {
 
 const CAPTION_GLYPH = { strokeWidth: 1.1, stroke: "currentColor", fill: "none" } as const;
 
-/** 品牌字后的小徽标。文案与含义由产品定,这里只保证它跟着品牌走。 */
-const BRAND_BADGE = "work";
-
-/** 品牌组合(字标 + 徽标),侧栏头与 Windows 标题栏共用。
- *  每个可见子节点自带 data-tauri-drag-region(LAYOUT.md §7)。 */
+/** 品牌组合(字标),侧栏头与 Windows 标题栏共用。
+ *  每个可见子节点自带 data-tauri-drag-region(LAYOUT.md §7)。
+ *  徽标「work」已按用户要求撤下,只保留字标。 */
 export function Brand() {
   const { t } = useI18n();
   return (
-    <>
-      <span data-tauri-drag-region="" className="shrink-0 text-xs font-bold tracking-tight text-base-content/80">
-        {t("app.name")}
-      </span>
-      <span data-tauri-drag-region="" className="badge badge-soft badge-primary badge-xs shrink-0 font-bold">
-        {BRAND_BADGE}
-      </span>
-    </>
+    <span data-tauri-drag-region="" className="shrink-0 text-xs font-bold tracking-tight text-base-content/80">
+      {t("app.name")}
+    </span>
   );
 }
 
