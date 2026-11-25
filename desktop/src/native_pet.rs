@@ -192,7 +192,7 @@ pub fn create(app: &AppHandle, x: i32, y: i32, width: i32, height: i32) -> Resul
         CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_NOACTIVATE,
             WINDOW_CLASS_NAME,
-            w!("MonkeyCode 桌宠"),
+            w!("MonkeyCode++ 桌宠"),
             WS_POPUP,
             x,
             y,

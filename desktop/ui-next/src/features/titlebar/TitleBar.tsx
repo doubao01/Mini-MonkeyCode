@@ -80,10 +80,11 @@ const BRAND_BADGE = "work";
 /** 品牌组合(字标 + 徽标),侧栏头与 Windows 标题栏共用。
  *  每个可见子节点自带 data-tauri-drag-region(LAYOUT.md §7)。 */
 export function Brand() {
+  const { t } = useI18n();
   return (
     <>
       <span data-tauri-drag-region="" className="shrink-0 text-xs font-bold tracking-tight text-base-content/80">
-        MonkeyCode
+        {t("app.name")}
       </span>
       <span data-tauri-drag-region="" className="badge badge-soft badge-primary badge-xs shrink-0 font-bold">
         {BRAND_BADGE}

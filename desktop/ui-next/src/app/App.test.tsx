@@ -886,6 +886,67 @@ describe("任务列排序跟得上后台活动", () => {
 });
 
 describe("新建入口", () => {
+  it.each(["取消", "失败"])("新建云端连接%s后保留原表单并允许重新连接", async (result) => {
+    const shell = stubShell({
+      extra: {
+        mc_status: () => ({ logged_in: false, host: "h" }),
+        mc_web_login: () => result === "取消" ? { ok: false } : Promise.reject(new Error("测试登录失败")),
+      },
+    });
+    render(<App />);
+    const list = screen.getByRole("complementary", { name: "选择任务" });
+    await userEvent.click(within(list).getByRole("button", { name: "新建任务" }));
+    await userEvent.click(screen.getByRole("tab", { name: "云端任务" }));
+    const heading = screen.getByRole("heading", { name: "新建任务" });
+    const pane = heading.closest("section") as HTMLElement;
+    const connect = await within(pane).findByRole("button", { name: "连接云端" });
+    await userEvent.click(connect);
+    if (result === "失败") expect(await screen.findByText(/测试登录失败/)).toBeTruthy();
+    expect(shell.count("mc_task_options")).toBe(0);
+    expect(document.body.contains(heading)).toBe(true);
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
+    await userEvent.click(connect);
+    expect(shell.count("mc_web_login")).toBe(2);
+  });
+
+  it("显示 MonkeyCode++ 品牌，并在窗口标题使用同一名称", async () => {
+    const shell = stubShell();
+    render(<App />);
+    expect(within(screen.getByRole("complementary", { name: "选择任务" })).getByText("MonkeyCode++")).toBeTruthy();
+    await waitFor(() => expect(shell.calls.some((c) => c.cmd === "plugin:window|set_title" && String(c.args?.value).endsWith(" — MonkeyCode++"))).toBe(true));
+  });
+
+  it("新建云端任务直接登录，成功后原表单恢复选项而不打开设置", async () => {
+    let loggedIn = false;
+    let finishLogin!: (value: { ok: boolean }) => void;
+    const shell = stubShell({
+      extra: {
+        mc_status: () => ({ logged_in: loggedIn, host: "h", user: loggedIn ? { id: "u" } : undefined }),
+        mc_task_options: () => ({ models: [], hosts: [], images: [], projects: [], plan: "" }),
+        mc_web_login: () => new Promise<{ ok: boolean }>((resolve) => {
+          finishLogin = (value) => { loggedIn = value.ok; resolve(value); };
+        }),
+      },
+    });
+    render(<App />);
+    const list = screen.getByRole("complementary", { name: "选择任务" });
+    await userEvent.click(within(list).getByRole("button", { name: "新建任务" }));
+    await userEvent.click(screen.getByRole("tab", { name: "云端任务" }));
+    const heading = screen.getByRole("heading", { name: "新建任务" });
+    const pane = heading.closest("section") as HTMLElement;
+    const connect = await within(pane).findByRole("button", { name: "连接云端" });
+    expect(shell.count("mc_task_options")).toBe(0);
+    await userEvent.click(connect);
+    await userEvent.click(connect);
+    expect(shell.count("mc_web_login")).toBe(1);
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
+    act(() => finishLogin({ ok: true }));
+    expect(await within(pane).findByLabelText("任务描述")).toBeTruthy();
+    expect(shell.count("mc_task_options")).toBe(1);
+    expect(document.body.contains(heading)).toBe(true);
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
+  });
+
   it("云端 tab 时列顶「新建任务」:格内创建表单预选云端页签(整页新建 2026-08-18 退役,创建即新格)", async () => {
     stubShell();
     render(<App />);

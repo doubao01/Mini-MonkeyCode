@@ -1065,7 +1065,7 @@ fn create_main_window(app: &AppHandle, page: &str) {
     }
     let opener = app.clone();
     let mut builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::App(page.into()))
-        .title("MonkeyCode")
+        .title("MonkeyCode++")
         .inner_size(1200.0, 800.0)
         // 布局下限:设置视图(168px 导航 + 内容列 + 保存条)在极窄窗口下
         // 保存按钮会被挤出可视区
@@ -1274,7 +1274,7 @@ fn ensure_pet_window(app: &AppHandle) {
     }
     let saved = *app.state::<PetPos>().0.lock_ok();
     let win = WebviewWindowBuilder::new(app, "pet", WebviewUrl::App("pet.html".into()))
-        .title("MonkeyCode 桌宠")
+        .title("MonkeyCode++ 桌宠")
         .inner_size(PET_W, PET_H)
         // GTK 的不可缩放窗口按内容自然尺寸布局,resize 与几何约束全被忽略,
         // 实测落在 WebView 默认的 200x200。Linux 改为保留 resizable,
@@ -1388,7 +1388,7 @@ fn ensure_pet_window(app: &AppHandle) {
     // 对 Win7 的 WebView2 透明限制零依赖。
     if let Err(e) =
         WebviewWindowBuilder::new(app, "pet-service", WebviewUrl::App("pet.html".into()))
-            .title("MonkeyCode 桌宠状态服务")
+            .title("MonkeyCode++ 桌宠状态服务")
             .inner_size(1.0, 1.0)
             .decorations(false)
             .skip_taskbar(true)
@@ -1930,7 +1930,7 @@ fn setup_tray(app: &AppHandle, pet_enabled: bool, sound_enabled: bool) -> tauri:
     // 托盘这一份还兼顾引擎卡死到 UI 都不响应的场景(2026-08-07 用户报障)
     let restart_engine = MenuItem::with_id(app, "restart-engine", "重启引擎", true, None::<&str>)?;
     let update = MenuItem::with_id(app, "check-update", "检查更新", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, "quit", "退出 MonkeyCode", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, "quit", "退出 MonkeyCode++", true, None::<&str>)?;
     let menu = Menu::with_items(
         app,
         &[
@@ -1945,7 +1945,7 @@ fn setup_tray(app: &AppHandle, pet_enabled: bool, sound_enabled: bool) -> tauri:
     )?;
     let tray = TrayIconBuilder::new()
         .icon(tray_icon())
-        .tooltip("MonkeyCode")
+        .tooltip("MonkeyCode++")
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id.as_ref() {

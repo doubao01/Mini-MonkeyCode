@@ -24,6 +24,13 @@ async function freshI18n() {
 }
 
 describe("词典完整性", () => {
+  it("中英文应用名称与云端连接按钮采用新版文案", () => {
+    expect(zh["app.name"]).toBe("MonkeyCode++");
+    expect(en["app.name"]).toBe("MonkeyCode++");
+    expect(zh["cloud.new.offline.action"]).toBe("连接云端");
+    expect(en["cloud.new.offline.action"]).toBe("Connect to cloud");
+  });
+
   it("中英文词典键集合完全一致且文案非空", () => {
     expect(Object.keys(en).sort()).toEqual(Object.keys(zh).sort());
     for (const key of Object.keys(zh) as Array<keyof typeof zh>) {

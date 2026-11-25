@@ -64,7 +64,7 @@ export const zh = {
   "settings.models.syncPending": "同步结果已加入待保存配置，请点击保存更改后生效。",
   "settings.models.syncUnavailable": "当前没有已连接的云端会话，可通过绑定接入 API 模型。",
   "settings.models.recovery": "配置已写入磁盘，但引擎未恢复：{message}",
-  "app.name": "MonkeyCode",
+  "app.name": "MonkeyCode++",
 
   // 空名兜底:占位 File 与剪贴板截图都可能不带文件名(uploads.ts 头注)
   "common.unnamedFile": "未命名文件",
@@ -1252,10 +1252,10 @@ export const zh = {
   "cloud.new.cancel": "取消",
   "cloud.new.loading": "加载选项…",
   "cloud.new.optionsFailed": "选项加载失败:{reason}",
-  "cloud.new.offline.title": "请先连接 MonkeyCode",
-  "cloud.new.offline.detail": "云端任务跑在 MonkeyCode 云端机器上,需要先在设置里连接账号。",
-  "cloud.new.offline.action": "去设置连接",
-  "cloud.new.offline.submitTip": "请先连接 MonkeyCode 后再创建云端任务",
+  "cloud.new.offline.title": "请先连接云端",
+  "cloud.new.offline.detail": "连接云端账号后即可创建云端任务。",
+  "cloud.new.offline.action": "连接云端",
+  "cloud.new.offline.submitTip": "请先连接云端后再创建云端任务",
   "cloud.new.error.content": "请填写任务描述",
   "cloud.new.error.missing": "模型与镜像不能为空",
   "cloud.new.publicHost": "公共宿主机",

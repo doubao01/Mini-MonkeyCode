@@ -120,6 +120,7 @@ export interface SplitCloudWiring {
   onRefresh: () => void;
   /** 云端未连接时启动独立登录窗，不进入模型设置。 */
   onConnect?: () => void;
+  sessionRevision?: number;
 }
 
 /** 行政接线(任务列行右键/待办组;旧侧栏能力随壳退役迁入)。 */
@@ -691,7 +692,8 @@ export function SplitView({
             initialText={creating.text}
             initialFiles={creating.files}
             recentDirs={recentDirs}
-            onOpenSettings={onOpenSettings}
+            onConnectCloud={cloud?.onConnect}
+            cloudSessionRevision={cloud?.sessionRevision}
             nativeDropEnabled={active && focused}
             onCreated={(created) => {
               setCreatingSlot(null);

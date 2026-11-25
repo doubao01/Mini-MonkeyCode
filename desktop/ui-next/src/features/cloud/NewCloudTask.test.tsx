@@ -215,10 +215,10 @@ describe("NewCloudTask", () => {
     expect((await screen.findByRole("button", { name: "关联仓库" })).textContent).toContain("阿尔法");
   });
 
-  // 未连接不是"选项加载失败":恢复动作是去设置里连账号,不是重试。
+  // 未连接不是"选项加载失败":恢复动作是直接登录云端,不是重试。
   // 无条件拉 mc_task_options 只会把壳的 401 原文摊在面板上(旧 UI
   // newtask.tsx:289/916 的 cloudReady 守卫 + 「请先连接」)
-  it("未连接 MonkeyCode:不拉选项,给「请先连接」空态与去设置入口", async () => {
+  it("未连接 MonkeyCode:不拉选项,给「请先连接」空态与直接连接入口", async () => {
     const calls: string[] = [];
     (window as unknown as { __TAURI__?: unknown }).__TAURI__ = {
       core: {
@@ -230,21 +230,21 @@ describe("NewCloudTask", () => {
         },
       },
     };
-    const onOpenSettings = vi.fn();
-    render(<NewCloudTask onCreated={() => {}} onOpenSettings={onOpenSettings} />);
-    expect(await screen.findByText("请先连接 MonkeyCode")).toBeTruthy();
+    const onConnect = vi.fn();
+    render(<NewCloudTask onCreated={() => {}} onConnect={onConnect} />);
+    expect(await screen.findByText("请先连接云端")).toBeTruthy();
     expect(calls).not.toContain("mc_task_options"); // 明知会 401 就不拉
     expect(screen.queryByText(/401/)).toBeNull(); // 不把壳的原文摊给用户
     expect(screen.queryByLabelText("任务描述")).toBeNull();
-    await userEvent.click(screen.getByText("去设置连接"));
-    expect(onOpenSettings).toHaveBeenCalled();
+    await userEvent.click(screen.getByText("连接云端"));
+    expect(onConnect).toHaveBeenCalled();
   });
 
   it("mc_status 自己抛错:不敢断言未连接,原因照常外显(不把一切故障粉饰成未连接)", async () => {
     stubShell([], OPTIONS, new Error("shell offline"));
     render(<NewCloudTask onCreated={() => {}} />);
     expect((await screen.findByRole("alert")).textContent).toContain("shell offline");
-    expect(screen.queryByText("请先连接 MonkeyCode")).toBeNull();
+    expect(screen.queryByText("请先连接云端")).toBeNull();
   });
 
   it("空描述拦截外显", async () => {

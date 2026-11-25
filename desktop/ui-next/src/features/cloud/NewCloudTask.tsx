@@ -39,26 +39,29 @@ export function NewCloudTask({
   onCreated,
   onCancel,
   initialProject,
-  onOpenSettings,
+  onConnect,
   active = true,
+  sessionRevision = 0,
 }: {
   onCreated: (task: CloudTaskDetail) => void;
   onCancel?: () => void;
   /** 「在此项目新建任务」预选的云端项目(侧栏项目组头入口) */
   initialProject?: CloudProject | null;
-  /** 未连接空态的「去设置连接」入口(与侧栏未连接空态同一动作) */
-  onOpenSettings?: () => void;
+  /** 未连接空态的「连接云端」入口(与侧栏未连接空态同一动作) */
+  onConnect?: () => void;
   /** 宿主把本面板 display:none 藏起来时置假(切到本地页签)。面板常驻挂载
    *  是为了不丢用户填的内容,但**藏起来的浮层不能继续占 Esc 层栈**——否则
    *  切走后按一下 Esc,被那个看不见的下拉吃掉。 */
   active?: boolean;
+  /** 登录会话更新后重拉状态和创建选项。 */
+  sessionRevision?: number;
 }) {
   const { t } = useI18n();
   const { generation: transportGeneration, isCurrent: isTransportCurrent } = useMcTransport();
   const [options, setOptions] = useState<McTaskOptions | null>(null);
   const [loadErr, setLoadErr] = useState("");
   // 云端连接三态:null = 还在查(此时什么都不拉、也不报错),true/false 已定。
-  // 未连接不是"选项加载失败":恢复动作是去设置里连账号,不是重试——把壳的
+  // 未连接不是"选项加载失败":恢复动作是直接登录云端,不是重试——把壳的
   // 401 原文摊在面板上,用户只能看到一句自己看不懂的报错(与侧栏未连接
   // 空态同一口径)
   const [connected, setConnected] = useState<boolean | null>(null);
@@ -128,7 +131,7 @@ export function NewCloudTask({
     return () => {
       alive = false;
     };
-  }, [transportGeneration, isTransportCurrent]);
+  }, [transportGeneration, isTransportCurrent, sessionRevision]);
 
   // 外部预选项目改变(侧栏另一个项目组头再点「+」,面板已挂载不会重建):
   // 换预选即覆盖当前关联,手输地址一并让位——预选是用户刚刚的明确指令
@@ -369,8 +372,8 @@ export function NewCloudTask({
           <IconCloud size={20} stroke={1.75} className="text-base-content/30" aria-hidden />
           <div className="text-sm font-semibold">{t("cloud.new.offline.title")}</div>
           <div className="text-xs text-base-content/60">{t("cloud.new.offline.detail")}</div>
-          {onOpenSettings && (
-            <button type="button" className="btn btn-primary btn-xs mt-1.5" onClick={onOpenSettings}>
+          {onConnect && (
+            <button type="button" className="btn btn-primary btn-xs mt-1.5" onClick={onConnect}>
               {t("cloud.new.offline.action")}
             </button>
           )}

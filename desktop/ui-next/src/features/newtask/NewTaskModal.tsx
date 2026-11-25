@@ -85,16 +85,18 @@ export function NewTaskModal({
   initialText,
   initialFiles,
   nativeDropEnabled = true,
-  onOpenSettings,
+  onConnectCloud,
+  cloudSessionRevision,
 }: {
   open: boolean;
   /** 无参数 = 用户取消/退出；success = 创建已落地后的收尾。 */
   onClose: (reason?: "success") => void;
   onCreated: (meta: SessionMeta) => void;
   onCloudCreated?: (task: CloudTaskDetail) => void;
-  /** 云端页签未连接 MonkeyCode 时的出口(空态里的「去设置连接」)。不传的话
+  /** 云端页签未连接 MonkeyCode 时的出口(空态里的「连接云端」)。不传的话
    *  那颗按钮根本不渲染——空态只剩一句"请先连接",却不给路。 */
-  onOpenSettings?: () => void;
+  onConnectCloud?: () => void;
+  cloudSessionRevision?: number;
   /** 最近项目目录(App 从 sessions 的 workdir 去重、按 updated_at 降序派生);
    *  环境过滤与截断在本组件内做 */
   recentDirs?: string[];
@@ -577,7 +579,8 @@ export function NewTaskModal({
                 <NewCloudTask
                   active={kind === "cloud"}
                   initialProject={initialCloudProject}
-                  onOpenSettings={onOpenSettings}
+                  onConnect={onConnectCloud}
+                  sessionRevision={cloudSessionRevision}
                   onCreated={(task) => {
                     createdRef.current = true;
                     onCloudCreated?.(task);

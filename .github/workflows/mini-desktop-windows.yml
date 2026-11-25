@@ -56,7 +56,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx eslint src/components/SidePanel.tsx src/features/settings/ModelsSection.tsx src/features/settings/models src/features/settings/ModelSettings.test.tsx src/lib/util/clipboard.ts src/lib/ipc/modelDiscovery.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          npm test -- src/features/settings/ModelSettings.test.tsx src/features/settings/SettingsView.test.tsx src/features/settings/settingsForm.test.ts src/features/settings/models/modelEditor.test.ts src/app/App.test.tsx src/components/SidePanel.test.tsx src/features/files/FilesPanel.test.tsx src/components/markdown/Markdown.test.tsx src/features/chat/ChatView.test.tsx src/features/cloud/CloudTaskView.test.tsx
+          npm test -- src/features/settings/ModelSettings.test.tsx src/features/settings/SettingsView.test.tsx src/features/settings/settingsForm.test.ts src/features/settings/models/modelEditor.test.ts src/app/App.test.tsx src/components/SidePanel.test.tsx src/features/files/FilesPanel.test.tsx src/components/markdown/Markdown.test.tsx src/features/chat/ChatView.test.tsx src/features/cloud/CloudTaskView.test.tsx src/features/cloud/NewCloudTask.test.tsx src/features/newtask/NewTaskModal.test.tsx src/features/split/SplitView.test.tsx src/features/titlebar/TitleBar.test.tsx src/lib/i18n/i18n.test.ts
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run build
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

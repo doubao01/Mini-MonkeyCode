@@ -673,6 +673,7 @@ function AppShell({ onTransportChanged }: { onTransportChanged: (generation: num
               },
               onChanged: reloadCloud,
               onRefresh: refreshCloud,
+              sessionRevision: cloudIdentityRevision,
               onConnect: () => {
                 if (connectingCloud.current) return;
                 if (!inDesktopShell()) { pushShell("settings.models.discoveryBrowser", "info"); return; }

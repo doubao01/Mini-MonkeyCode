@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "MonkeyCode",
+  "productName": "MonkeyCode++",
   "version": "26083003.0.0",
   "identifier": "com.chaitin.baizhi.monkeycode",
   "build": {

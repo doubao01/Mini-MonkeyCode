@@ -61,7 +61,7 @@ describe("自绘窗框条(Windows / Linux)", () => {
   it("不放品牌:品牌的法定位置只有侧栏头,两处都摆会变成上下两个 header", () => {
     const { done } = stubShell("Windows NT 10.0");
     render(<TitleBar />);
-    expect(screen.queryByText("MonkeyCode")).toBeNull();
+    expect(screen.queryByText("MonkeyCode++")).toBeNull();
     expect(screen.queryByText("work")).toBeNull();
     done();
   });

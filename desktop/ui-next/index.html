@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>MonkeyCode</title>
+    <title>MonkeyCode++</title>
     <!-- webfont 由内核宿主在 /fonts/ 下静态提供(uidist/fonts,随二进制嵌入);
          vite dev 模式下该路径由 public/ 提供 -->
     <link rel="stylesheet" href="/fonts/fonts.css" />
@@ -103,7 +103,7 @@
               body = box.lastChild;
             }
             if (!shown) {
-              body.textContent = "[MonkeyCode 启动异常] 请把以下内容发给开发者:\n";
+              body.textContent = "[MonkeyCode++ 启动异常] 请把以下内容发给开发者:\n";
               shown = true;
             }
             body.textContent += "\n" + kind + ": " + msg + (extra ? "\n" + extra : "") + "\n";
