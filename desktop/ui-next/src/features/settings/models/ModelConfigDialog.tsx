@@ -1,5 +1,5 @@
-import { IconEye, IconEyeOff, IconHelpCircle, IconX } from "@tabler/icons-react";
-import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { IconChevronDown, IconEye, IconEyeOff, IconHelpCircle, IconX } from "@tabler/icons-react";
+import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 import { useI18n } from "@/lib/i18n";
@@ -7,8 +7,135 @@ import type { HostModel } from "@/lib/ipc/config";
 import { openExternal } from "@/lib/ipc/host";
 import { inDesktopShell } from "@/lib/ipc/ipc";
 import { cancelModelDiscovery, discoverModels } from "@/lib/ipc/modelDiscovery";
+import { useDismiss } from "@/lib/util/useDismiss";
 import { useEscLayer } from "@/lib/util/escLayer";
 import { requestPreview } from "./modelEditor";
+
+/** 模型 ID 选择器：原生 datalist 的弹层只做前缀匹配，空列表或输入已等
+ * 于某项时只剩当前值一项，也没有加载/失败态。这里自绘列表，展开即列出
+ * 全部已获取的 ID，并支持筛选与键盘选择。 */
+function ModelCombo({ id, value, items, disabled, canFetch, loading, message, invalid, expandKey, onOpen, onChange }: {
+  id: string;
+  value: string;
+  items: string[];
+  disabled: boolean;
+  canFetch: boolean;
+  loading: boolean;
+  message: string;
+  invalid: boolean;
+  /** 递增即展开（获取列表成功时调用方推进，不必手点三角）。 */
+  expandKey: number;
+  onOpen: () => void;
+  onChange: (value: string) => void;
+}) {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(-1);
+  // null = 未在输入筛选，展开时列出全部候选；否则只列匹配项。
+  const [filter, setFilter] = useState<string | null>(null);
+  const box = useRef<HTMLDivElement>(null);
+  const requested = useRef(false);
+  const close = useCallback(() => { setOpen(false); setActive(-1); setFilter(null); }, []);
+  useDismiss(open, box, close);
+  // 首次展开且还没拿到列表时触发一次发现，不让用户先猜按钮在哪。
+  useEffect(() => {
+    if (!open || requested.current || loading || items.length || disabled || !canFetch) return;
+    requested.current = true;
+    onOpen();
+  }, [canFetch, disabled, items.length, loading, onOpen, open]);
+  const visible = filter ? items.filter((item) => item.toLowerCase().includes(filter.trim().toLowerCase())) : items;
+  // 获取列表成功后自动展开（父层递增 expandKey）。渲染期间根据新 prop
+  // 调整自身状态，避免在 effect 里同步 setState 引起级联渲染。
+  const [seenKey, setSeenKey] = useState(expandKey);
+  if (expandKey !== seenKey) {
+    setSeenKey(expandKey);
+    if (items.length && !disabled) {
+      setOpen(true);
+      setFilter(null);
+      setActive(Math.max(0, items.indexOf(value)));
+    }
+  }
+  // 筛选会把 active 甩出界；渲染前收回列表内，避免高亮与回车指向脱节。
+  const cursor = active >= 0 && active < visible.length ? active : visible.length ? 0 : -1;
+  const listId = `${id}-list`;
+  const expand = () => {
+    if (disabled) return;
+    setOpen(true);
+    // 已选值不能当筛选词，否则打开只剩当前这一项——用户反馈的核心症状。
+    setActive(Math.max(0, items.indexOf(value)));
+  };
+  const pick = (item: string) => {
+    onChange(item);
+    close();
+  };
+  const onKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (!open) { expand(); return; }
+      if (!visible.length) return;
+      const step = e.key === "ArrowDown" ? 1 : -1;
+      setActive((current) => (current + step + visible.length) % visible.length);
+      return;
+    }
+    if (e.key === "Enter" && open) {
+      // 列表里的回车是选项，不能顺手提交整个表单；空列表时放行默认提交。
+      const item = visible[cursor];
+      if (!item) return;
+      e.preventDefault();
+      pick(item);
+      return;
+    }
+    if (e.key === "Escape" && open) {
+      e.stopPropagation();
+      close();
+      return;
+    }
+    if (e.key === "Tab") close();
+  };
+  const status = loading
+    ? t("settings.models.loading")
+    : message
+      ? ""
+      : items.length
+        ? ""
+        : t("settings.models.listEmpty");
+  return (
+    <div ref={box} className="relative">
+      <div className="flex gap-1">
+        <input
+          id={id}
+          role="combobox"
+          aria-expanded={open}
+          aria-controls={listId}
+          aria-autocomplete="list"
+          aria-invalid={invalid || undefined}
+          aria-describedby={invalid ? `${id}-error` : undefined}
+          aria-activedescendant={open && cursor >= 0 ? `${id}-opt-${cursor}` : undefined}
+          className="input input-sm min-w-0 flex-1 font-mono"
+          value={value}
+          disabled={disabled}
+          onChange={(e) => { onChange(e.target.value); setFilter(e.target.value); setOpen(true); setActive(0); }}
+          onClick={expand}
+          onKeyDown={onKeyDown}
+        />
+        <button type="button" className="btn btn-ghost btn-sm btn-square" disabled={disabled} aria-label={t(open ? "settings.models.collapseList" : "settings.models.expandList")} aria-expanded={open} aria-controls={listId} onClick={() => (open ? close() : expand())}>
+          <IconChevronDown size={16} aria-hidden className={`transition-transform duration-150 ${open ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+      {open && (
+        <div className="absolute inset-x-0 z-50 mt-1 overflow-hidden rounded-box border border-base-300 bg-base-100 shadow-lg">
+          <ul id={listId} role="listbox" aria-label={t("settings.models.idList")} className="max-h-56 overflow-y-auto overflow-x-hidden p-1">
+            {visible.map((item, index) => (
+              <li key={item} id={`${id}-opt-${index}`} role="option" aria-selected={item === value} className={`cursor-pointer truncate rounded-md px-2 py-1.5 font-mono text-xs ${index === cursor ? "menu-active" : ""}`} onMouseEnter={() => setActive(index)} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(item)}>{item}</li>
+            ))}
+            {!loading && items.length > 0 && !visible.length && <li role="presentation" className="px-2 py-1.5 text-xs text-base-content/70">{t("settings.models.listNoMatch")}</li>}
+          </ul>
+          {status && <p role="status" className="border-t border-base-300 px-2 py-1.5 text-xs leading-relaxed text-base-content/70">{status}</p>}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function ModelConfigDialog({ original, readonly, changes, blocked, onClose, onSave }: {
   original: HostModel | null;
@@ -30,6 +157,7 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
   const [error, setError] = useState("");
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [items, setItems] = useState<string[]>([]);
+  const [expandKey, setExpandKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [discoveryMessage, setDiscoveryMessage] = useState("");
   const [needsConfirmation, setNeedsConfirmation] = useState(false);
@@ -82,6 +210,7 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
       if (request.current !== requestId) return;
       setItems(result);
       setDiscoveryMessage(t(result.length ? "settings.models.discoveryReady" : "settings.models.discoveryEmpty", { n: result.length }));
+      if (result.length) setExpandKey((key) => key + 1);
     } catch (e) {
       if (request.current === requestId) setDiscoveryMessage(e instanceof Error ? e.message : String(e));
     } finally {
@@ -153,8 +282,8 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
               {errors.api_key && <p id={`${id}-api_key-error`} role="alert" className="text-xs text-error">{errors.api_key}</p>}
             </div>
             {field("model", t("settings.models.modelName"), <>
-              <input {...attrs("model")} className="input input-sm w-full font-mono" list={`${id}-models`} value={model.model} onChange={(e) => patch({ model: e.target.value })} />
-              <datalist id={`${id}-models`}>{items.map((item) => <option key={item} value={item} />)}</datalist>
+                <ModelCombo id={`${id}-model`} value={model.model} items={items} disabled={readonly || saving} canFetch={!!model.base_url.trim() && !!model.api_key.trim()} loading={loading} message={discoveryMessage} invalid={!!errors.model} expandKey={expandKey} onOpen={() => void fetchList()} onChange={(v) => patch({ model: v })} />
+              {errors.model && <p id={`${id}-model-error`} role="alert" className="text-xs text-error">{errors.model}</p>}
               {!readonly && <button type="button" disabled={loading || !model.base_url.trim() || !model.api_key.trim()} className="btn btn-outline btn-sm w-fit" onClick={() => void fetchList()}>{loading && <span className="loading loading-spinner loading-xs" aria-hidden />}{t("settings.models.discover")}</button>}
               {needsConfirmation && <div role="status" className="text-xs text-warning"><p>{t("settings.models.reconfirm")}</p><button type="button" className="btn btn-ghost btn-xs" onClick={() => setNeedsConfirmation(false)}>{t("settings.models.confirmId")}</button></div>}
               {discoveryMessage && <p role="status" className="text-xs leading-relaxed text-base-content/70">{discoveryMessage}</p>}

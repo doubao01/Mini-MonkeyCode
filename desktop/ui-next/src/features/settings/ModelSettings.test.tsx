@@ -144,15 +144,49 @@ describe("云端式模型管理", () => {
     const value = invoke.mock.calls.find(([cmd]) => cmd === "save_config")![1]!.config as DesktopConfig;
     expect(value.models[0]).toMatchObject({ source: "baizhi", api_key: "replacement-token" });
   });
+  it("模型名称下拉展开即列出全部已获取 ID,不以当前值筛选", async () => {
+    shell(); render(<SettingsView onClose={() => {}} />); await edit();
+    // 首次展开自动发现一次，列表就不能只有当前值一项
+    await userEvent.click(screen.getByRole("button", { name: "展开模型列表" }));
+    const list = await screen.findByRole("listbox", { name: "模型 ID 列表" });
+    await waitFor(() => expect(within(list).getAllByRole("option").map((o) => o.textContent)).toEqual(["real-model", "another-model"]));
+    await userEvent.click(within(list).getByRole("option", { name: "another-model" }));
+    expect((screen.getByLabelText("模型名称") as HTMLInputElement).value).toBe("another-model");
+    expect(screen.queryByRole("listbox", { name: "模型 ID 列表" })).toBeNull();
+  });
+  it("模型名称下拉支持输入筛选与键盘选择,无匹配时提示", async () => {
+    shell(); render(<SettingsView onClose={() => {}} />); await edit();
+    const input = screen.getByLabelText("模型名称");
+    await userEvent.click(input);
+    const list = await screen.findByRole("listbox", { name: "模型 ID 列表" });
+    await waitFor(() => expect(within(list).getAllByRole("option")).toHaveLength(2));
+    await userEvent.clear(input);
+    await userEvent.type(input, "real");
+    await waitFor(() => expect(within(list).getAllByRole("option")).toHaveLength(1));
+    await userEvent.keyboard("{ArrowDown}{Enter}");
+    expect((input as HTMLInputElement).value).toBe("real-model");
+    await userEvent.clear(input);
+    await userEvent.type(input, "nonexistent");
+    expect(await screen.findByText("没有匹配的模型 ID。")).toBeDefined();
+  });
+  it("未拿到列表时下拉说明可手填,不把唯一当前值当候选", async () => {
+    shell({ discover: async () => [] }); render(<SettingsView onClose={() => {}} />); await edit();
+    await userEvent.click(screen.getByRole("button", { name: "展开模型列表" }));
+    expect(await screen.findByText("接口返回空列表，请手动输入模型 ID。")).toBeDefined();
+    expect(within(screen.getByRole("listbox", { name: "模型 ID 列表" })).queryAllByRole("option")).toHaveLength(0);
+    await userEvent.type(screen.getByLabelText("模型名称"), "-manual");
+    await saveEditor();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "编辑 AI 大模型" })).toBeNull());
+  });
   it("发现的模型选择在改接口后须重新选择或明确确认,手填ID仍可保存", async () => {
     const invoke = shell(); render(<SettingsView onClose={() => {}} />); await edit();
     await userEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
-    await waitFor(() => expect(document.querySelector('option[value="real-model"]')).not.toBeNull());
-    fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "real-model" } });
+    const list = await screen.findByRole("listbox", { name: "模型 ID 列表" });
+    await waitFor(() => expect(within(list).getByRole("option", { name: "real-model" })).toBeDefined());
+    await userEvent.click(within(list).getByRole("option", { name: "real-model" }));
     fireEvent.change(screen.getByLabelText("模型 API 地址"), { target: { value: "https://new.test/v1" } });
     expect(screen.getByText(/接口或凭据已改变/)).toBeDefined();
     expect(within(editor()).getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(true);
-    expect(document.querySelector('option[value="real-model"]')).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: "确认当前模型 ID" }));
     await saveEditor();
     await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === "save_config")).toBe(true));
@@ -326,7 +360,7 @@ describe("云端式模型管理", () => {
     await userEvent.type(screen.getByLabelText("API Token"), "new");
     await act(async () => done(["stale-model"]));
     expect(screen.queryByDisplayValue("stale-model")).toBeNull();
-    expect(document.querySelector('option[value="stale-model"]')).toBeNull();
+    expect(screen.queryByRole("option", { name: "stale-model" })).toBeNull();
     expect(invoke.mock.calls.some(([cmd]) => cmd === "models_discover_cancel")).toBe(true);
   });
   it("已连接云端可以同步，结果待用户保存而非假报自动成功", async () => {
