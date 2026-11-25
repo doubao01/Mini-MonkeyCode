@@ -150,6 +150,13 @@ const fireDragAt = (
 };
 
 describe("分屏视图(树形布局)", () => {
+  it("任务列底部只留 GitHub 且指向本仓库,不再有官网图标", async () => {
+    const { calls } = stubShell();
+    render(<Harness />);
+    expect(screen.queryByRole("button", { name: "官网" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "GitHub" }));
+    await waitFor(() => expect(calls.some((c) => c.cmd === "plugin:opener|open_url" && c.args?.url === "https://github.com/doubao01/Mini-MonkeyCode")).toBe(true));
+  });
   it("首启缺省单格(2026-08-20 定案:新用户不见空栏;存过树不受影响)", () => {
     stubShell();
     render(<Harness />);

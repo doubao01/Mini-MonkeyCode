@@ -355,7 +355,7 @@ function mathExtension(): MarkedExtension {
   };
 }
 
-function makeMarked(): Marked {
+function makeMarked(allowFold = true): Marked {
   const m = new Marked({ gfm: true, breaks: true, async: false });
   m.use(mathExtension());
   m.use({
@@ -374,7 +374,7 @@ function makeMarked(): Marked {
         return (
           `<div class="md-code">` +
           `<div class="md-code-toolbar"><span>${escapeHtml(name || t("md.code"))}</span><span class="md-code-actions">` +
-          (text.split("\n").length > 24 ? `<button type="button" class="btn btn-ghost btn-xs" data-md-fold aria-expanded="true">${escapeHtml(t("md.codeCollapse"))}</button>` : "") +
+          (allowFold && text.split("\n").length > 24 ? `<button type="button" class="btn btn-ghost btn-xs" data-md-fold aria-expanded="true">${escapeHtml(t("md.codeCollapse"))}</button>` : "") +
           `<button type="button" class="btn btn-ghost btn-xs" data-md-copy="${escapeHtml(text)}">${escapeHtml(t("md.copy"))}</button></span></div>` +
           `<pre><code class="hljs${language ? ` language-${language}` : ""}">${body}</code></pre>` +
           `</div>`
@@ -405,6 +405,7 @@ function makeMarked(): Marked {
 }
 
 const parser = makeMarked();
+const streamingParser = makeMarked(false);
 
 /** 行内专用解析器:breaks **必须关**——breaks:true 把 \n 画成 <br>,而
  * MarkdownInline 的消费方(思考摘要/发现标题/子代理行)全是单行 truncate
@@ -562,9 +563,9 @@ function renderMathBeforeCommit(container: ParentNode): void {
   }
 }
 
-export function renderMarkdown(source: string, linkifyInlineFiles = false): string {
+export function renderMarkdown(source: string, linkifyInlineFiles = false, allowFold = true): string {
   const template = document.createElement("template");
-  template.innerHTML = parser.parse(source) as string;
+  template.innerHTML = (allowFold ? parser : streamingParser).parse(source) as string;
   normalizeResourceUrls(template.content, linkifyInlineFiles);
   // KaTeX 先只产生转义后的源码占位；正文净化完成后才把可信渲染产物写入。
   template.innerHTML = DOMPurify.sanitize(template.innerHTML, { USE_PROFILES: { html: true } });
@@ -572,15 +573,15 @@ export function renderMarkdown(source: string, linkifyInlineFiles = false): stri
   return template.innerHTML;
 }
 
-function useRenderedMarkdown(source: string, enabled: boolean, linkifyInlineFiles: boolean, renderKey: string): string {
+function useRenderedMarkdown(source: string, enabled: boolean, linkifyInlineFiles: boolean, renderKey: string, allowFold = true): string {
   const [mathRevision, setMathRevision] = useState(0);
   const html = useMemo(() => {
     // 两者都是渲染世代：KaTeX 就绪/分批和 locale 变化时，即使 source 未变
     // 也要重建 HTML（公式 DOM / 复制按钮文案分别由它们决定）。
     void mathRevision;
     void renderKey;
-    return enabled ? renderMarkdown(source, linkifyInlineFiles) : "";
-  }, [enabled, linkifyInlineFiles, mathRevision, renderKey, source]);
+    return enabled ? renderMarkdown(source, linkifyInlineFiles, allowFold) : "";
+  }, [allowFold, enabled, linkifyInlineFiles, mathRevision, renderKey, source]);
   useEffect(() => {
     if (!html.includes("data-md-math=")) return;
     let cancelled = false;
@@ -967,7 +968,7 @@ const MarkdownChunk = memo(function MarkdownChunk({
   locale: string;
   linkifyInlineFiles: boolean;
 }) {
-  const html = useRenderedMarkdown(source, true, linkifyInlineFiles, locale);
+  const html = useRenderedMarkdown(source, true, linkifyInlineFiles, locale, false);
   return <div data-md-stable-chunk="" dangerouslySetInnerHTML={{ __html: html }} />;
 });
 
@@ -992,7 +993,7 @@ function StreamingMarkdown({
   const segments = useMemo(() => segmentStreamingMarkdown(sampled), [sampled]);
   // 活跃尾块会反复重建 DOM，暂不生成可聚焦的启发式链接；KaTeX 则在
   // HTML 提交前同步写好最终 DOM，避免每批 token 都经历源码→公式的跳变。
-  const tailHtml = useRenderedMarkdown(segments.tail, near && !segments.plainTail && Boolean(segments.tail), false, locale);
+  const tailHtml = useRenderedMarkdown(segments.tail, near && !segments.plainTail && Boolean(segments.tail), false, locale, false);
   const cache = useRef<LocalImageCache>(new Map());
   const localImageUrlRef = useRef(localImageUrl);
   useEffect(() => {

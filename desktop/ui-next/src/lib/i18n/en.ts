@@ -36,6 +36,8 @@ export const en: Record<MessageKey, string> = {
   "settings.models.imageOff": "Not supported",
   "settings.models.imageHint": "Enable image inputs for recognition and analysis. This is a configuration, not a verified capability.",
   "settings.models.discover": "Fetch model list",
+  "settings.models.reconfirm": "The endpoint or credentials changed. Select a model again, or confirm that the current ID works with the new endpoint.",
+  "settings.models.confirmId": "Confirm current model ID",
   "settings.models.discoveryHint": "Fetching sends the token to this API. Enter a model ID manually if listing is unsupported.",
   "settings.models.discoveryEmpty": "The API returned no models. Enter a model ID manually.",
   "settings.models.discoveryBrowser": "Fetching requires the desktop app; manual model IDs are available.",
@@ -92,7 +94,7 @@ export const en: Record<MessageKey, string> = {
   "split.sideResize": "Drag to resize the task list",
   "split.resize": "Resize panes",
   "split.resizeHint": "Drag to resize, double-click to evenly distribute this region",
-  "split.website": "Website",
+
   "split.pickTitle": "Pick a task",
   "split.listShow": "Show task list",
   "split.listHide": "Hide task list",

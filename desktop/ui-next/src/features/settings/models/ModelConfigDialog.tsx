@@ -32,6 +32,7 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
   const [items, setItems] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
   const [discoveryMessage, setDiscoveryMessage] = useState("");
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
   const request = useRef<string | null>(null);
   const lastThink = useRef(original?.think === "off" ? undefined : original?.think);
   const root = useRef<HTMLFormElement>(null);
@@ -57,7 +58,9 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
   }, []));
 
   const patch = (values: Partial<HostModel>) => {
+    if ("model" in values) setNeedsConfirmation(false);
     if ("provider" in values || "base_url" in values || "api_key" in values) {
+      if (items.includes(model.model)) setNeedsConfirmation(true);
       cancelRequest();
       setItems([]);
       setLoading(false);
@@ -87,7 +90,7 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
   };
   const save = async (e: FormEvent) => {
     e.preventDefault();
-    if (readonly || savingRef.current || blocked) return;
+    if (readonly || savingRef.current || blocked || needsConfirmation) return;
     const invalid: Record<string, string> = {};
     if (!model.model.trim() && (!original?.source || model.model !== original.model)) invalid.model = t("settings.models.required");
     if (!model.source && !model.api_key.trim()) invalid.api_key = t("settings.models.required");
@@ -133,29 +136,30 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
           <h2 id={`${id}-title`} className="text-lg font-semibold">{t(readonly ? "settings.models.viewTitle" : original ? "settings.models.editTitle" : "settings.models.bindTitle")}</h2>
           <button type="button" className="btn btn-ghost btn-sm btn-square" disabled={saving} onClick={onClose} aria-label={t("settings.models.close")}><IconX size={18} aria-hidden /></button>
         </header>
-        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overscroll-contain pr-1">
+        <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] overscroll-contain pr-1">
           {readonly && <p className="text-xs text-base-content/70">{t("settings.models.readonly")}</p>}
           <fieldset disabled={readonly || saving} className="flex min-w-0 flex-col gap-4">
-            {field("provider", t("settings.models.format"), <select id={`${id}-provider`} disabled={!!model.source} className="select select-sm w-full" value={model.provider} onChange={(e) => patch({ provider: e.target.value })}>
+            {field("provider", t("settings.models.format"), <select id={`${id}-provider`} className="select select-sm w-full" value={model.provider} onChange={(e) => patch({ provider: e.target.value })}>
               <option value="openai">OpenAI Chat</option><option value="openai_responses">OpenAI Responses</option><option value="anthropic">Anthropic Messages</option>
               {!['openai', 'openai_responses', 'anthropic'].includes(model.provider) && <option value={model.provider}>{model.provider}</option>}
             </select>)}
-            {field("base_url", t("settings.models.address"), <input {...attrs("base_url")} disabled={!!model.source} className="input input-sm w-full font-mono" placeholder="https://api.example.com/v1" value={model.base_url} onChange={(e) => patch({ base_url: e.target.value })} />, preview && <span className="break-all font-mono">{preview}</span>)}
+            {field("base_url", t("settings.models.address"), <input {...attrs("base_url")} className="input input-sm w-full font-mono" placeholder="https://api.example.com/v1" value={model.base_url} onChange={(e) => patch({ base_url: e.target.value })} />, preview && <span className="break-all font-mono">{preview}</span>)}
             <div className="flex flex-col gap-2">
               <div className="flex items-center justify-between gap-2"><label htmlFor={`${id}-api_key`} className="text-sm font-medium">{t("settings.models.token")}</label>
                 <button type="button" className="btn btn-link btn-xs h-auto p-0" title={t("settings.models.tokenHelpHint")} onClick={() => void openExternal("https://monkeycode.docs.baizhi.cloud/")}><IconHelpCircle size={14} aria-hidden />{t("settings.models.tokenHelp")}</button>
               </div>
-              <div className="flex gap-1"><input {...attrs("api_key")} disabled={!!model.source} autoComplete="off" type={showToken ? "text" : "pass" + "word"} className="input input-sm min-w-0 flex-1 font-mono" value={model.api_key} onChange={(e) => patch({ api_key: e.target.value })} />
+              <div className="flex gap-1"><input {...attrs("api_key")} autoComplete="off" type={showToken ? "text" : "pass" + "word"} className="input input-sm min-w-0 flex-1 font-mono" value={model.api_key} onChange={(e) => patch({ api_key: e.target.value })} />
                 <button type="button" className="btn btn-ghost btn-sm btn-square" onClick={() => setShowToken(!showToken)} aria-label={t(showToken ? "settings.models.hideToken" : "settings.models.showToken")}>{showToken ? <IconEyeOff size={16} aria-hidden /> : <IconEye size={16} aria-hidden />}</button></div>
               {errors.api_key && <p id={`${id}-api_key-error`} role="alert" className="text-xs text-error">{errors.api_key}</p>}
             </div>
             {field("model", t("settings.models.modelName"), <>
-              <input {...attrs("model")} disabled={!!model.source} className="input input-sm w-full font-mono" list={`${id}-models`} value={model.model} onChange={(e) => patch({ model: e.target.value })} />
+              <input {...attrs("model")} className="input input-sm w-full font-mono" list={`${id}-models`} value={model.model} onChange={(e) => patch({ model: e.target.value })} />
               <datalist id={`${id}-models`}>{items.map((item) => <option key={item} value={item} />)}</datalist>
-              {!readonly && !model.source && <button type="button" disabled={loading || !model.base_url.trim() || !model.api_key.trim()} className="btn btn-outline btn-sm w-fit" onClick={() => void fetchList()}>{loading && <span className="loading loading-spinner loading-xs" aria-hidden />}{t("settings.models.discover")}</button>}
+              {!readonly && <button type="button" disabled={loading || !model.base_url.trim() || !model.api_key.trim()} className="btn btn-outline btn-sm w-fit" onClick={() => void fetchList()}>{loading && <span className="loading loading-spinner loading-xs" aria-hidden />}{t("settings.models.discover")}</button>}
+              {needsConfirmation && <div role="status" className="text-xs text-warning"><p>{t("settings.models.reconfirm")}</p><button type="button" className="btn btn-ghost btn-xs" onClick={() => setNeedsConfirmation(false)}>{t("settings.models.confirmId")}</button></div>}
               {discoveryMessage && <p role="status" className="text-xs leading-relaxed text-base-content/70">{discoveryMessage}</p>}
             </>, !readonly && t("settings.models.discoveryHint"))}
-            {field("name", t("settings.models.displayName"), <input id={`${id}-name`} disabled={!!model.source} className="input input-sm w-full" value={model.name} onChange={(e) => patch({ name: e.target.value })} />, t("settings.models.nameHint"))}
+            {field("name", t("settings.models.displayName"), <input id={`${id}-name`} className="input input-sm w-full" value={model.name} onChange={(e) => patch({ name: e.target.value })} />, t("settings.models.nameHint"))}
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               {field("context", t("settings.models.contextLength"), <input {...attrs("context")} type="number" min={1} step={1} className="input input-sm w-full" placeholder={t("settings.models.inherit")} value={context} onChange={(e) => setContext(e.target.value)} />)}
               {field("output", t("settings.models.outputLength"), <input {...attrs("output")} type="number" min={1} step={1} className="input input-sm w-full" placeholder={t("settings.models.inherit")} value={output} onChange={(e) => setOutput(e.target.value)} />)}
@@ -178,7 +182,7 @@ export function ModelConfigDialog({ original, readonly, changes, blocked, onClos
         </div>
         <footer className="flex shrink-0 justify-end gap-2">
           <button type="button" className="btn btn-outline btn-sm" disabled={saving} onClick={onClose}>{t(readonly ? "settings.models.close" : "settings.models.cancel")}</button>
-          {!readonly && <button type="submit" className="btn btn-primary btn-sm" disabled={saving || blocked}>{saving && <span className="loading loading-spinner loading-xs" aria-hidden />}{t("settings.models.save")}</button>}
+          {!readonly && <button type="submit" className="btn btn-primary btn-sm" disabled={saving || blocked || needsConfirmation}>{saving && <span className="loading loading-spinner loading-xs" aria-hidden />}{t("settings.models.save")}</button>}
         </footer>
       </form>
       <div className="modal-backdrop" aria-hidden onClick={() => { if (!saving) onClose(); }} />

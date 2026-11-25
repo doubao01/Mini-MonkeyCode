@@ -24,7 +24,7 @@ function ModelCard({ model, isDefault, onEdit, onDefault, onDelete }: {
   const format = model.provider === "openai" ? "OpenAI Chat" : model.provider === "openai_responses" ? "OpenAI Responses" : model.provider === "anthropic" ? "Anthropic Messages" : model.provider;
   const owner = model.owner === "private" ? t("settings.models.personal") : model.owner === "team" ? t("settings.models.team") : model.owner === "public" ? t("settings.models.public") : model.source === SOURCE_BAIZHI ? t("model.source.baizhi") : model.source === SOURCE_MONKEYCODE ? t("model.source.member") : model.source || t("settings.models.local");
   const action = (fn: () => void) => { close(); fn(); };
-  return <li className="flex min-w-0 items-center gap-3 rounded-lg border border-base-300 bg-base-100 px-3 py-3 transition-colors hover:border-primary/50 focus-within:border-primary">
+  return <li className="card card-border min-w-0 flex-row items-center gap-3 bg-base-100 px-3 py-3">
     <span className="hidden h-8 w-8 shrink-0 items-center justify-center rounded-full bg-base-200 sm:flex"><IconRobot size={16} aria-hidden /></span>
     <div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
       <button type="button" className="min-w-0 max-w-full truncate text-start text-sm font-medium underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" title={name} onClick={onEdit}>{name}</button>
@@ -34,7 +34,7 @@ function ModelCard({ model, isDefault, onEdit, onDefault, onDelete }: {
     </div>
     <div ref={menu} className={`dropdown dropdown-end shrink-0 ${open ? "dropdown-open" : ""}`}>
       <button ref={trigger} type="button" className="btn btn-ghost btn-sm btn-square" aria-label={t("settings.models.more", { name })} aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)}><IconDotsVertical size={16} aria-hidden /></button>
-      {open && <ul role="menu" className="dropdown-content menu z-10 w-40 rounded-box border border-base-300 bg-base-100 p-1 shadow-lg" onKeyDown={(e) => {
+      {open && <ul role="menu" className="dropdown-content menu z-10 w-40 rounded-box bg-base-100 p-1 shadow-sm" onKeyDown={(e) => {
         const buttons = [...e.currentTarget.querySelectorAll<HTMLButtonElement>('button')];
         const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
         if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
@@ -54,7 +54,7 @@ function ModelCard({ model, isDefault, onEdit, onDefault, onDelete }: {
 export function ModelsSection({ draft, onDraft, onSave, onModalChange, changes = [], blocked = false, onSync }: {
   draft: SettingsDraft;
   onDraft: (up: (d: SettingsDraft) => SettingsDraft) => void;
-  onSave: (original: HostModel | null, model: HostModel) => Promise<string | null>;
+  onSave: (original: HostModel | null, model: HostModel, onPersisted: (saved: HostModel) => void) => Promise<string | null>;
   onModalChange: (open: boolean) => void;
   changes?: string[];
   blocked?: boolean;
@@ -98,7 +98,7 @@ export function ModelsSection({ draft, onDraft, onSave, onModalChange, changes =
       <div className="min-w-0"><h2 className="flex items-center gap-2 text-lg font-semibold"><IconRobot size={22} aria-hidden />{t("settings.models.title")}</h2><p className="mt-2 text-sm text-base-content/70">{t("settings.models.subtitle")}</p></div>
       <button type="button" className="btn btn-outline btn-sm shrink-0" onClick={() => { setMessage(""); setEditing({ original: null }); }}>{t("settings.models.bind")}</button>
     </header>
-    <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain pb-32">
+    <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden [scrollbar-gutter:stable] overscroll-contain pb-32">
       <ul className="flex flex-col gap-4">
         {rows.map(({ model, index }) => <ModelCard key={`${model.source ?? ''}:${model.name}`} model={model} isDefault={index === draft.defaultIdx} onEdit={() => setEditing({ original: { ...model } })} onDefault={() => onDraft((d) => ({ ...d, defaultIdx: d.models.findIndex((m) => m.name === model.name && m.source === model.source) }))} onDelete={() => setDeleting(model)} />)}
       </ul>
@@ -112,7 +112,10 @@ export function ModelsSection({ draft, onDraft, onSave, onModalChange, changes =
       {message && <p role="status" className="mt-3 text-xs text-base-content/70">{message}</p>}
     </div>
     {editing && <ModelConfigDialog original={editing.original} readonly={editing.original?.source === SOURCE_MONKEYCODE || !!editing.original?.locked} changes={changes} blocked={blocked} onClose={() => setEditing(null)} onSave={async (model) => {
-      const error = await onSave(editing.original, model);
+      const error = await onSave(editing.original, model, (saved) => {
+        // 写盘后恢复失败会保留弹窗；定位基线必须同步到落盘版本，才能继续编辑/重试。
+        setEditing({ original: { ...saved } });
+      });
       if (!error) setMessage(t("settings.models.saved"));
       return error;
     }} />}

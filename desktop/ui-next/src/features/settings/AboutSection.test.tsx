@@ -1,25 +1,24 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { resetUpdateForTest, useUpdateState } from "@/features/update/useUpdate";
+import { resetUpdateForTest, checkUpdateNow } from "@/features/update/useUpdate";
 import { AboutSection } from "./AboutSection";
 
 afterEach(() => {
-  // 更新态是模块级 store(侧栏底部条与本页同源),跨用例会串
-  act(() => resetUpdateForTest());
+  // 共享更新态是模块级 store,跨用例需复位
+  resetUpdateForTest();
   delete (window as unknown as { __TAURI__?: unknown }).__TAURI__;
 });
 
-function stubShell({ failInstall, exportLog }: { failInstall?: string; exportLog?: () => unknown } = {}) {
+function stubShell({ exportLog }: { exportLog?: () => unknown } = {}) {
   const calls: string[] = [];
   (window as unknown as { __TAURI__?: unknown }).__TAURI__ = {
     core: {
       invoke: (cmd: string) => {
         calls.push(cmd);
-        if (cmd === "host_info") return Promise.resolve({ version: "1.0", engine_version: "0.9" });
+        if (cmd === "host_info") return Promise.resolve({ version: "26.11.25.01", engine_version: "0.9" });
         if (cmd === "update_check") return Promise.resolve({ available: true, current: "1.0", latest: "1.1" });
-        if (cmd === "update_install" && failInstall) return Promise.reject(new Error(failInstall));
         if (cmd === "update_install") return new Promise(() => {}); // 成功:壳自行重启,不返回
         if (cmd === "export_engine_log" && exportLog) {
           try {
@@ -36,62 +35,32 @@ function stubShell({ failInstall, exportLog }: { failInstall?: string; exportLog
   return { calls };
 }
 
-function SidebarUpdateProbe() {
-  const { installing } = useUpdateState();
-  return <span data-testid="sidebar-update-state">{installing ? "installing" : "idle"}</span>;
-}
-
 /** 隐藏排障入口的解锁手势:连点版本号 5 次。 */
 async function unlock() {
-  const version = await screen.findByRole("button", { name: /应用 1\.0/ });
+  const version = await screen.findByRole("button", { name: /应用 26\.11\.25\.01/ });
   for (let i = 0; i < 5; i++) await userEvent.click(version);
 }
 
-describe("关于页更新(H5)", () => {
-  it("发现更新使用信息提示，并明确安装后自动重启应用", async () => {
-    stubShell();
+describe("关于页不检查更新", () => {
+  it("展示当日应用版本，不渲染检查或安装更新，不调用更新接口", async () => {
+    const { calls } = stubShell();
     render(<AboutSection />);
-    await userEvent.click(screen.getByRole("button", { name: "检查更新" }));
-
-    const status = await screen.findByRole("status");
-    expect(status.className).toContain("alert-info");
-    expect(status.className).not.toContain("alert-success");
-    expect(status.textContent).toContain("安装完成后应用将自动重启");
+    await screen.findByRole("button", { name: /应用 26\.11\.25\.01/ });
+    expect(screen.queryByRole("button", { name: /检查更新|下载更新|更新中/ })).toBeNull();
+    expect(calls).not.toContain("update_check");
+    expect(calls).not.toContain("update_install");
   });
 
-  it("安装失败:复位忙态、外显失败文案,后续排障反馈不被旧错误遮蔽", async () => {
-    stubShell({ failInstall: "签名校验失败", exportLog: () => "/tmp/ohmyagent.log" });
+  it("共享更新状态已发现新版时仍不提供安装入口", async () => {
+    const { calls } = stubShell();
+    await checkUpdateNow();
     render(<AboutSection />);
-    await userEvent.click(screen.getByRole("button", { name: "检查更新" }));
-    const install = await screen.findByRole("button", { name: "下载更新" });
-
-    await userEvent.click(install);
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("更新失败:签名校验失败"));
-    const again = screen.getByRole("button", { name: "下载更新" }); // 忙态已复位,不再是"更新中…"
-    expect((again as HTMLButtonElement).disabled).toBe(false);
-
-    await unlock();
-    await userEvent.click(screen.getByRole("button", { name: "导出日志" }));
-    expect((await screen.findByRole("status")).textContent).toContain("日志已导出");
-    expect(screen.queryByText(/更新失败/)).toBeNull();
-  });
-
-  it("设置页发起安装后共享忙态，侧栏提醒同步进入安装中", async () => {
-    stubShell();
-    render(
-      <>
-        <AboutSection />
-        <SidebarUpdateProbe />
-      </>,
-    );
-    await userEvent.click(screen.getByRole("button", { name: "检查更新" }));
-    await userEvent.click(await screen.findByRole("button", { name: "下载更新" }));
-    const busy = screen.getByRole("button", { name: /更新中/ });
-    expect((busy as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByTestId("sidebar-update-state").textContent).toBe("installing");
+    await screen.findByText(/应用 26\.11\.25\.01/);
+    expect(screen.queryByRole("button", { name: /检查更新|下载更新/ })).toBeNull();
+    expect(calls.filter((cmd) => cmd === "update_check")).toHaveLength(1);
+    expect(calls).not.toContain("update_install");
   });
 });
-
 describe("隐藏排障入口(连点版本号解锁)", () => {
   // 「导出日志」= 一步拿到可直接附进工单的引擎日志副本(走另存对话框),
   // 与「打开存储目录 → 自己进 ohmyagent/logs/ 找文件」不是一回事;撤掉后
@@ -126,10 +95,10 @@ describe("隐藏排障入口(连点版本号解锁)", () => {
 
   // 不解锁时一个排障入口都不占位;「打开扩展目录」是真撤了(常驻入口在
   // 设置·浏览器分区),解锁也不会出现
-  it("常态只有「检查更新」:三个排障入口都不出现,打开扩展目录更是已撤", async () => {
+  it("常态没有更新动作:三个排障入口都不出现,打开扩展目录更是已撤", async () => {
     stubShell();
     render(<AboutSection />);
-    await screen.findByText(/应用 1\.0/);
+    await screen.findByText(/应用 26\.11\.25\.01/);
     expect(screen.queryByRole("button", { name: "重启引擎" })).toBeNull();
     expect(screen.queryByRole("button", { name: "导出日志" })).toBeNull();
     expect(screen.queryByRole("button", { name: "打开扩展目录" })).toBeNull();
@@ -140,7 +109,7 @@ describe("隐藏排障入口(连点版本号解锁)", () => {
   it("连点版本号 5 次:两个入口现身,分别走 open_app_dir / open_log_dir", async () => {
     const { calls } = stubShell();
     render(<AboutSection />);
-    const version = await screen.findByRole("button", { name: /应用 1\.0/ });
+    const version = await screen.findByRole("button", { name: /应用 26\.11\.25\.01/ });
     for (let i = 0; i < 4; i++) await userEvent.click(version);
     expect(screen.queryByRole("button", { name: "打开程序目录" })).toBeNull(); // 差一次不解锁
     await userEvent.click(version);

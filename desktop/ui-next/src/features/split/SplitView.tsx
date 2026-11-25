@@ -31,7 +31,6 @@ import {
   IconPlus,
   IconRefresh,
   IconSettings,
-  IconWorld,
   IconX,
 } from "@tabler/icons-react";
 import { Fragment, useEffect, useEffectEvent, useRef, useState, type DragEvent as ReactDragEvent, type MouseEvent as ReactMouseEvent } from "react";
@@ -1260,7 +1259,7 @@ function WorkbenchList({
   onOpenSettings: () => void;
   onOpenShortcuts: () => void;
 }) {
-  const { t, locale } = useI18n();
+  const { t } = useI18n();
   // 项目组折叠:沿用 mc.collapsedGroups(与旧侧栏同键,升级不丢档);
   // 收起即卸载(§6.2)。「运行中」小节不可折
   const [collapsed, setCollapsed] = useState<Set<string>>(readCollapsedGroups);
@@ -1821,8 +1820,7 @@ function WorkbenchList({
       {/* 更新提醒条(旧侧栏底部条原样回迁,2026-08-20 用户问「还有么」——
           删旧 Sidebar 时漏迁;与设置页「关于」共享 useUpdate store) */}
       <UpdateFooter />
-      {/* 设置沉左下(2026-08-19 mockup);官网/GitHub 靠右(2026-08-20 用户
-          定案;URL 以 README 支持区为准,openExternal 出浏览器) */}
+      {/* 设置沉左下;GitHub 靠右指向本仓库(2026-11-25 用户要求撤下官网图标) */}
       <div className="flex items-center border-t border-base-300 p-1">
         <button
           type="button"
@@ -1844,21 +1842,10 @@ function WorkbenchList({
         <span className="min-w-0 flex-1" />
         <button
           type="button"
-          aria-label={t("split.website")}
-          title={t("split.website")}
-          className="btn btn-ghost btn-square btn-sm text-base-content/60"
-          // 官网按应用语言分流(frontend/site-redirect.ts 同一口径:中文站
-          // .com、国际站 .net——2026-08-20 用户报障「为啥是国际版」)
-          onClick={() => openExternal(locale.startsWith("zh") ? "https://monkeycode-ai.com/" : "https://monkeycode-ai.net/")}
-        >
-          <IconWorld size={16} stroke={1.75} aria-hidden />
-        </button>
-        <button
-          type="button"
           aria-label="GitHub"
           title="GitHub"
           className="btn btn-ghost btn-square btn-sm text-base-content/60"
-          onClick={() => openExternal("https://github.com/chaitin/MonkeyCode")}
+          onClick={() => openExternal("https://github.com/doubao01/Mini-MonkeyCode")}
         >
           <IconBrandGithub size={16} stroke={1.75} aria-hidden />
         </button>

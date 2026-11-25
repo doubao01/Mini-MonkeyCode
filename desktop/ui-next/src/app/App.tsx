@@ -680,7 +680,11 @@ function AppShell({ onTransportChanged }: { onTransportChanged: (generation: num
                 connectingCloud.current = true;
                 void mcWebLogin().then((result) => {
                   if (result.ok) onMcSessionChanged();
-                }).catch((e: unknown) => pushShell("cloud.connectFailed", "error", { params: { reason: errText(e) } }))
+                }).catch((e: unknown) => {
+                  // 登录窗可能已吸收 Cookie，仅最后确认失败；重新核对身份，不沿用旧表单状态。
+                  onMcSessionChanged();
+                  pushShell("cloud.connectFailed", "error", { params: { reason: errText(e) } });
+                })
                   .finally(() => { connectingCloud.current = false; });
               },
             }}

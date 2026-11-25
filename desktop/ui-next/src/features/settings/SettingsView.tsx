@@ -1005,7 +1005,10 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
     }, []),
   );
 
+  const pendingDraftUpdates = useRef<Array<(d: SettingsDraft) => SettingsDraft>>([]);
   const updateDraft = (up: (d: SettingsDraft) => SettingsDraft) => {
+    // 保存候选尚未发布时，把同步/编辑排队；落盘后再应用到包含本次编辑的草稿。
+    if (savingRef.current) { pendingDraftUpdates.current.push(up); return; }
     if (draftRef.current) {
       const next = up(draftRef.current);
       draftRef.current = next;
@@ -1065,7 +1068,7 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
   };
 
   /** 保存用户确认的配置快照，并返回实际结果供顶层弹窗决定是否关闭。 */
-  const save = async (target?: SettingsDraft): Promise<string | null> => {
+  const save = async (target?: SettingsDraft, onPersisted?: (saved: SettingsDraft) => void): Promise<string | null> => {
     if (savingRef.current) return t("settings.models.busy");
     if (hasRunningTask) return t("settings.models.runningHint");
     const conf = cfgRef.current;
@@ -1082,28 +1085,34 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
     setSaving(true);
     setSaveError("");
     const p = buildPayload(conf, candidate);
+    const acceptSaved = (saved: DesktopConfig) => {
+      cfgRef.current = saved;
+      setCfg(saved);
+      draftRef.current = draftFromConfig(saved);
+      setDraft(draftRef.current);
+      onPersisted?.(draftRef.current);
+    };
     try {
       await saveConfig(p);
-      cfgRef.current = p;
-      setCfg(p);
-      // 只提交用户确认的快照；在途出现的新草稿留在保存条，不自动重启第二次。
-      if (draftRef.current === start) {
-        draftRef.current = draftFromConfig(p);
-        setDraft(draftRef.current);
-      }
+      acceptSaved(p);
       return null;
     } catch (e) {
       let message = errMsg(e);
       // 壳可能已写盘但引擎重启失败，回读确认，避免提示“未保存”掩盖落盘事实。
       const disk = await getConfig().catch(() => null);
       if (disk && payloadEquals(buildPayload(disk, draftFromConfig(disk)), buildPayload(p, draftFromConfig(p)))) {
-        cfgRef.current = disk;
-        setCfg(disk);
+        acceptSaved(disk);
         message = t("settings.models.recovery", { message });
       }
       setSaveError(message);
       return message;
     } finally {
+      // 成功或回读确认落盘以新快照为基底；失败则仍以原草稿为基底。
+      const queued = pendingDraftUpdates.current.splice(0);
+      if (draftRef.current && queued.length) {
+        draftRef.current = queued.reduce((current, up) => up(current), draftRef.current);
+        setDraft(draftRef.current);
+      }
       savingRef.current = false;
       setSaving(false);
     }
@@ -1142,12 +1151,16 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
       case "models":
         return draft ? <ModelsSection draft={draft} onDraft={updateDraft} onModalChange={setModelModalOpen}
           changes={pendingChanges} blocked={hasRunningTask || saving} onSync={applySync}
-          onSave={async (original, model) => {
+          onSave={async (original, model, onPersisted) => {
             const current = draftRef.current;
             if (!current) return t("settings.models.busy");
             const next = applyModelEdit(current, original, model);
             if (!next) return t("settings.models.conflict");
-            return save(next);
+            return save(next, (saved) => {
+              // 写盘会过滤历史空项，不能拿过滤前下标作为保存回执的身份。
+              const persisted = saved.models.find((m) => m.name === model.name.trim() && m.source === model.source);
+              if (persisted) onPersisted(persisted);
+            });
           }} /> : configGate;
       case "mcp":
         return draft ? <McpSection draft={draft} onDraft={updateDraft} /> : configGate;

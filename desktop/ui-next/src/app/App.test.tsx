@@ -916,6 +916,24 @@ describe("新建入口", () => {
     await waitFor(() => expect(shell.calls.some((c) => c.cmd === "plugin:window|set_title" && String(c.args?.value).endsWith(" — MonkeyCode++"))).toBe(true));
   });
 
+  it("登录Cookie已建立但最终确认失败时仍重查身份,原表单恢复创建选项", async () => {
+    let loggedIn = false;
+    const shell = stubShell({ extra: {
+      mc_status: () => ({ logged_in: loggedIn, host: "h", user: loggedIn ? { id: "u" } : undefined }),
+      mc_task_options: () => ({ models: [], hosts: [], images: [], projects: [], plan: "" }),
+      mc_web_login: () => { loggedIn = true; return Promise.reject(new Error("登录确认未完成")); },
+    } });
+    render(<App />);
+    const list = screen.getByRole("complementary", { name: "选择任务" });
+    await userEvent.click(within(list).getByRole("button", { name: "新建任务" }));
+    await userEvent.click(screen.getByRole("tab", { name: "云端任务" }));
+    const pane = screen.getByRole("heading", { name: "新建任务" }).closest("section")!;
+    await userEvent.click(await within(pane).findByRole("button", { name: "连接云端" }));
+    expect(await within(pane).findByLabelText("任务描述")).toBeTruthy();
+    expect(shell.count("mc_task_options")).toBe(1);
+    expect(screen.queryByRole("dialog", { name: "设置" })).toBeNull();
+  });
+
   it("新建云端任务直接登录，成功后原表单恢复选项而不打开设置", async () => {
     let loggedIn = false;
     let finishLogin!: (value: { ok: boolean }) => void;

@@ -33,6 +33,18 @@ afterEach(() => {
 });
 
 describe("markdown 渲染", () => {
+  it("流式期间不提供代码折叠,停流后才允许折叠并复制完整原文", async () => {
+    const code = Array.from({ length: 26 }, (_, i) => `line ${i}`).join("\n");
+    const source = `\`\`\`text\n${code}\n\`\`\``;
+    const { container, rerender } = render(<Markdown source={source} deferMermaid />);
+    await waitFor(() => expect(container.querySelector(".md-code")).not.toBeNull());
+    expect(container.querySelector("[data-md-fold]")).toBeNull();
+    rerender(<Markdown source={source} />);
+    const fold = screen.getByRole("button", { name: "收起代码" });
+    await userEvent.click(fold);
+    expect(container.querySelector("pre")!.hidden).toBe(true);
+    expect(container.querySelector("[data-md-copy]")!.getAttribute("data-md-copy")).toBe(code);
+  });
   it("标题/列表/行内代码正常产出(preflight 清零后靠 md.css 补齐,这里断结构)", () => {
     const { container } = render(<Markdown source={"# 标题\n\n- 甲\n- 乙\n\n`code`"} />);
     expect(container.querySelector("h1")?.textContent).toBe("标题");

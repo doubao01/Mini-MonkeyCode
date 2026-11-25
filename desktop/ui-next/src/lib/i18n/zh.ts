@@ -35,6 +35,8 @@ export const zh = {
   "settings.models.imageOff": "不支持",
   "settings.models.imageHint": "开启后，该模型可接收图片输入用于识别和分析。这是配置声明，并非检测结果。",
   "settings.models.discover": "获取模型列表",
+  "settings.models.reconfirm": "接口或凭据已改变，请重新选择模型，或确认当前 ID 适用于新接口。",
+  "settings.models.confirmId": "确认当前模型 ID",
   "settings.models.discoveryHint": "点击获取会将 Token 发送至填写的接口。不支持列表时可直接输入模型 ID。",
   "settings.models.discoveryEmpty": "接口返回空列表，请手动输入模型 ID。",
   "settings.models.discoveryBrowser": "模型列表获取需要桌面应用；可手动输入模型 ID。",
@@ -100,7 +102,7 @@ export const zh = {
   "split.sideResize": "拖动调整任务列宽度",
   "split.resize": "调整格子比例",
   "split.resizeHint": "拖动调整比例,双击均分此区域格子",
-  "split.website": "官网",
+
   "split.pickTitle": "选择任务",
   "split.listShow": "展开任务列",
   "split.listHide": "收起任务列",

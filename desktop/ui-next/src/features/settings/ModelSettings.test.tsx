@@ -16,9 +16,9 @@ const config: DesktopConfig = {
   mc_base_url: "https://private.test", mc_basic_auth: "old-auth", mc_llm_base_url: "https://proxy.test",
 };
 
-function shell({ initial = config, save, discover, extra = {} }: {
+function shell({ initial = config, save, discover, persistedError, extra = {} }: {
   initial?: DesktopConfig; save?: (value: DesktopConfig) => Promise<void>;
-  discover?: () => Promise<string[]>; extra?: Record<string, () => unknown>;
+  discover?: () => Promise<string[]>; persistedError?: string; extra?: Record<string, () => unknown>;
 } = {}) {
   let disk = structuredClone(initial);
   const invoke = vi.fn(async (cmd: string, args?: Record<string, unknown>) => {
@@ -28,6 +28,7 @@ function shell({ initial = config, save, discover, extra = {} }: {
       const value = args!.config as DesktopConfig;
       if (save) await save(value);
       disk = structuredClone(value);
+      if (persistedError) throw new Error(persistedError);
     }
     if (cmd === "models_discover") return discover ? discover() : ["real-model", "another-model"];
     if (cmd === "list_wsl_distros") return [];
@@ -51,6 +52,113 @@ beforeEach(() => setLocale("zh-CN"));
 afterEach(() => { resetEscLayersForTest(); Reflect.deleteProperty(window, "__TAURI__"); localStorage.clear(); });
 
 describe("云端式模型管理", () => {
+  it("同步在弹窗保存期间返回时排队,不撤销已保存的重命名", async () => {
+    let finishSave!: () => void;
+    let finishSync!: (result: unknown) => void;
+    const invoke = shell({ save: () => new Promise<void>((resolve) => { finishSave = resolve; }), extra: {
+      mc_status: () => ({ logged_in: true }),
+      mc_models_sync: () => new Promise((resolve) => { finishSync = resolve; }),
+    } });
+    render(<SettingsView onClose={() => {}} />);
+    await userEvent.click(await screen.findByRole("button", { name: "同步模型" }));
+    await edit();
+    await userEvent.type(screen.getByLabelText("备注（选填）"), "新版");
+    await saveEditor();
+    await act(async () => finishSync({ models: [{ ...config.models[1], name: "云端", source: "monkeycode" }] }));
+    await act(async () => finishSave());
+    expect(await screen.findByRole("button", { name: "主力新版" })).toBeDefined();
+    expect(screen.queryByRole("button", { name: "主力" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await act(async () => finishSave());
+    const saves = invoke.mock.calls.filter(([cmd]) => cmd === "save_config");
+    expect((saves.at(-1)![1]!.config as DesktopConfig).models.map((m) => m.name)).toContain("主力新版");
+    expect((saves.at(-1)![1]!.config as DesktopConfig).models.map((m) => m.name)).not.toContain("主力");
+  });
+  it("写盘后重启失败也发布已落盘草稿,取消弹窗后再保存不回滚", async () => {
+    const invoke = shell({ persistedError: "引擎重启失败" });
+    render(<SettingsView onClose={() => {}} />); await edit();
+    await userEvent.type(screen.getByLabelText("备注（选填）"), "新版");
+    await saveEditor();
+    await screen.findAllByText(/配置已写入/);
+    await userEvent.click(within(editor()).getByRole("button", { name: "取消" }));
+    expect(await screen.findByRole("button", { name: "主力新版" })).toBeDefined();
+    await selectDefault();
+    await userEvent.click(screen.getByRole("button", { name: "保存" }));
+    await waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === "save_config")).toHaveLength(2));
+    const value = invoke.mock.calls.filter(([cmd]) => cmd === "save_config").at(-1)![1]!.config as DesktopConfig;
+    expect(value.models.map((m) => m.name)).toEqual(["主力新版", "备用"]);
+    expect(value.models[1]!.default).toBe(true);
+  });
+  it("写盘后恢复失败保留的弹窗可继续修改并重试,不产生引用冲突", async () => {
+    const invoke = shell({ persistedError: "引擎重启失败" });
+    render(<SettingsView onClose={() => {}} />); await edit();
+    await userEvent.type(screen.getByLabelText("备注（选填）"), "新版");
+    await saveEditor();
+    await screen.findAllByText(/配置已写入/);
+    await userEvent.type(screen.getByLabelText("备注（选填）"), "重试");
+    await saveEditor();
+    await waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === "save_config")).toHaveLength(2));
+    expect(screen.queryByText(/原模型已被同步/)).toBeNull();
+    const value = invoke.mock.calls.filter(([cmd]) => cmd === "save_config").at(-1)![1]!.config as DesktopConfig;
+    expect(value.models[0]!.name).toBe("主力新版重试");
+  });
+  it.each([false, true])("历史空项被写盘过滤后重试仍按模型身份定位（有后继项=%s）", async (hasNext) => {
+    const empty = { name: "", provider: "anthropic", base_url: "", api_key: "", model: "" };
+    const initial = { ...config, models: [empty, config.models[0]!, ...(hasNext ? [config.models[1]!] : [])] };
+    const invoke = shell({ initial, persistedError: "引擎重启失败" });
+    render(<SettingsView onClose={() => {}} />); await edit();
+    await userEvent.type(screen.getByLabelText("备注（选填）"), "新版");
+    await saveEditor();
+    await screen.findAllByText(/配置已写入/);
+    await userEvent.type(screen.getByLabelText("备注（选填）"), "重试");
+    await saveEditor();
+    await waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === "save_config")).toHaveLength(2));
+    const value = invoke.mock.calls.filter(([cmd]) => cmd === "save_config").at(-1)![1]!.config as DesktopConfig;
+    expect(value.models.map((m) => m.name)).toEqual(["主力新版重试", ...(hasNext ? ["备用"] : [])]);
+  });
+  it("新增已落盘但恢复失败后重试只更新该模型,不追加重名项", async () => {
+    const invoke = shell({ persistedError: "引擎重启失败" });
+    render(<SettingsView onClose={() => {}} />);
+    await screen.findByRole("button", { name: "主力" });
+    await userEvent.click(screen.getByRole("button", { name: "绑定" }));
+    await userEvent.type(screen.getByLabelText("API Token"), "new-token");
+    await userEvent.type(screen.getByLabelText("模型名称"), "manual-id");
+    await saveEditor();
+    await screen.findAllByText(/配置已写入/);
+    expect(screen.getByRole("dialog", { name: "编辑 AI 大模型" })).toBeDefined();
+    await saveEditor();
+    await waitFor(() => expect(invoke.mock.calls.filter(([cmd]) => cmd === "save_config")).toHaveLength(2));
+    const value = invoke.mock.calls.filter(([cmd]) => cmd === "save_config").at(-1)![1]!.config as DesktopConfig;
+    expect(value.models.map((m) => m.name)).toEqual(["主力", "备用", "manual-id"]);
+  });
+  it("未锁定百智云模型保留五项身份配置编辑能力及来源", async () => {
+    const invoke = shell({ initial: { ...config, models: [{ ...config.models[0]!, source: "baizhi" }] } });
+    render(<SettingsView onClose={() => {}} />); await edit();
+    for (const label of ["接口格式", "模型 API 地址", "API Token", "模型名称", "备注（选填）"]) {
+      expect(screen.getByLabelText(label).hasAttribute("disabled")).toBe(false);
+    }
+    await userEvent.clear(screen.getByLabelText("API Token"));
+    await userEvent.type(screen.getByLabelText("API Token"), "replacement-token");
+    await saveEditor();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "编辑 AI 大模型" })).toBeNull());
+    const value = invoke.mock.calls.find(([cmd]) => cmd === "save_config")![1]!.config as DesktopConfig;
+    expect(value.models[0]).toMatchObject({ source: "baizhi", api_key: "replacement-token" });
+  });
+  it("发现的模型选择在改接口后须重新选择或明确确认,手填ID仍可保存", async () => {
+    const invoke = shell(); render(<SettingsView onClose={() => {}} />); await edit();
+    await userEvent.click(screen.getByRole("button", { name: "获取模型列表" }));
+    await waitFor(() => expect(document.querySelector('option[value="real-model"]')).not.toBeNull());
+    fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "real-model" } });
+    fireEvent.change(screen.getByLabelText("模型 API 地址"), { target: { value: "https://new.test/v1" } });
+    expect(screen.getByText(/接口或凭据已改变/)).toBeDefined();
+    expect(within(editor()).getByRole("button", { name: "保存" }).hasAttribute("disabled")).toBe(true);
+    expect(document.querySelector('option[value="real-model"]')).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "确认当前模型 ID" }));
+    await saveEditor();
+    await waitFor(() => expect(invoke.mock.calls.some(([cmd]) => cmd === "save_config")).toBe(true));
+    const value = invoke.mock.calls.find(([cmd]) => cmd === "save_config")![1]!.config as DesktopConfig;
+    expect(value.models[0]).toMatchObject({ model: "real-model", base_url: "https://new.test/v1" });
+  });
   it("默认打开模型，不显示账号导航或配置表单", async () => {
     shell(); render(<SettingsView onClose={() => {}} />);
     expect(await screen.findByRole("heading", { name: "AI 大模型" })).toBeDefined();
