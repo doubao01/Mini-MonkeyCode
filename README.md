@@ -1,3 +1,15 @@
+# Mini-MonkeyCode · MonkeyCode++ 桌面改造
+
+本仓库基于 [chaitin/MonkeyCode](https://github.com/chaitin/MonkeyCode)，包含模型配置弹窗、桌面面板和聊天代码块改造。
+
+- [Windows 云端编译](https://github.com/doubao01/Mini-MonkeyCode/actions/workflows/mini-desktop-windows.yml)：编译桌面程序，**不包含引擎或安装包**。
+- [构建与运行说明](desktop/CLOUD_BUILD.md)
+- [界面改造验证记录](desktop/ui-next/UI_UPLIFT_STATUS.md)
+
+下方保留上游项目说明。
+
+---
+
 <p align="center">
   <img src="./monkeyai/landing/public/monkeyai-logo.png" alt="百智办公 MonkeyAI" width="112" />
 </p>
