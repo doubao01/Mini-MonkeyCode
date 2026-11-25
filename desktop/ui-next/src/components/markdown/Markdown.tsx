@@ -22,7 +22,7 @@ import {
 import { t, useI18n } from "@/lib/i18n";
 import { openMenu } from "@/lib/contextMenu";
 import { openExternal } from "@/lib/ipc/host";
-import { copyText } from "@/lib/util/clipboard";
+import { copyText, copyTextResult } from "@/lib/util/clipboard";
 import { inferInlineCodeFilePath, resolveMarkdownResource } from "@/lib/util/markdownPaths";
 
 const escapeHtml = (s: string) =>
@@ -373,7 +373,9 @@ function makeMarked(): Marked {
         // data-md-copy 携带原文(escape 过),复制走它而不是回读高亮 DOM
         return (
           `<div class="md-code">` +
-          `<button type="button" class="btn btn-xs absolute top-1.5 right-1.5 z-1 opacity-0" data-md-copy="${escapeHtml(text)}">${escapeHtml(t("md.copy"))}</button>` +
+          `<div class="md-code-toolbar"><span>${escapeHtml(name || t("md.code"))}</span><span class="md-code-actions">` +
+          (text.split("\n").length > 24 ? `<button type="button" class="btn btn-ghost btn-xs" data-md-fold aria-expanded="true">${escapeHtml(t("md.codeCollapse"))}</button>` : "") +
+          `<button type="button" class="btn btn-ghost btn-xs" data-md-copy="${escapeHtml(text)}">${escapeHtml(t("md.copy"))}</button></span></div>` +
           `<pre><code class="hljs${language ? ` language-${language}` : ""}">${body}</code></pre>` +
           `</div>`
         );
@@ -607,6 +609,17 @@ function useRenderedMarkdown(source: string, enabled: boolean, linkifyInlineFile
 
 function onContainerClick(e: MouseEvent<HTMLElement>, onLocalLink?: (path: string) => void, onUrlLink?: (url: string) => boolean) {
   const target = e.target as HTMLElement;
+  const fold = target.closest<HTMLElement>("[data-md-fold]");
+  if (fold) {
+    e.preventDefault();
+    const pre = fold.closest('.md-code')?.querySelector('pre');
+    if (!pre) return;
+    const collapsed = fold.getAttribute('aria-expanded') === 'true';
+    fold.setAttribute('aria-expanded', String(!collapsed));
+    pre.hidden = collapsed;
+    fold.textContent = t(collapsed ? 'md.codeExpand' : 'md.codeCollapse');
+    return;
+  }
   const copyBtn = target.closest<HTMLElement>("[data-md-copy]");
   if (copyBtn) {
     e.preventDefault();
@@ -617,12 +630,15 @@ function onContainerClick(e: MouseEvent<HTMLElement>, onLocalLink?: (path: strin
     // 此前这里是 `if (!clipboard?.writeText) return;` 静默返回 + `.then()` 无
     // `.catch()`:前者让消息流里最高频的这颗按钮点了没反应也不报错,后者的
     // 未处理拒绝会被 index.html 的兜底画成满屏红底诊断面板。
-    copyText(text);
-    const original = copyBtn.textContent;
-    copyBtn.textContent = t("md.copied");
-    window.setTimeout(() => {
-      copyBtn.textContent = original;
-    }, 1500);
+    const button = copyBtn as HTMLButtonElement;
+    const original = button.textContent;
+    button.disabled = true;
+    void copyTextResult(text).then((ok) => {
+      if (!button.isConnected) return;
+      button.disabled = false;
+      button.textContent = t(ok ? "md.copied" : "md.copyFailed");
+      window.setTimeout(() => { if (button.isConnected) button.textContent = original; }, 1500);
+    });
     return;
   }
   const localTarget = target.closest<HTMLElement>("[data-mc-local-href]");

@@ -23,6 +23,8 @@ fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "get_config",
+            "models_discover",
+            "models_discover_cancel",
             "save_config",
             "take_ui_intent",
             "host_info",

@@ -39,6 +39,7 @@ import {
   takeUiIntent,
 } from "@/lib/ipc/host";
 import { inDesktopShell, listen } from "@/lib/ipc/ipc";
+import { mcWebLogin } from "@/lib/ipc/account";
 import { afterEngineReady, engineRestart, engineStatus, onEngineStatus, type EngineStatus } from "@/lib/ipc/engine";
 import { todoUploadsDir, type TodoItem } from "@/lib/ipc/todos";
 import { pathBackedFile } from "@/lib/ipc/uploads";
@@ -146,13 +147,14 @@ function AppShell({ onTransportChanged }: { onTransportChanged: (generation: num
   } | null>(null);
   const createSeq = useRef(0);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>("account");
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection>("models");
   const settingsOpenRef = useRef(false);
   const settingsRef = useRef<SettingsViewHandle>(null);
   const settingsReturnFocusRef = useRef<HTMLElement | null>(null);
   const [cloudReload, setCloudReload] = useState(0);
   const [cloudRefresh, setCloudRefresh] = useState(0);
   const [cloudIdentityRevision, setCloudIdentityRevision] = useState(0);
+  const connectingCloud = useRef(false);
   // 工作台状态机(槽位/布局树/焦点;toast 路由与通知抑制要在渲染分支之外读)
   const split = useSplitState();
   const reloadCloud = useCallback(() => setCloudReload((n) => n + 1), []);
@@ -177,7 +179,7 @@ function AppShell({ onTransportChanged }: { onTransportChanged: (generation: num
   const [composerFocusRequest, setComposerFocusRequest] = useState(0);
   const focusSeqRef = useRef(0);
   const requestComposerFocus = () => setComposerFocusRequest(++focusSeqRef.current);
-  const openSettings = useCallback((section: SettingsSection = "account") => {
+  const openSettings = useCallback((section: SettingsSection = "models") => {
     if (settingsOpenRef.current) return;
     settingsOpenRef.current = true;
     setSettingsInitialSection(section);
@@ -671,6 +673,15 @@ function AppShell({ onTransportChanged }: { onTransportChanged: (generation: num
               },
               onChanged: reloadCloud,
               onRefresh: refreshCloud,
+              onConnect: () => {
+                if (connectingCloud.current) return;
+                if (!inDesktopShell()) { pushShell("settings.models.discoveryBrowser", "info"); return; }
+                connectingCloud.current = true;
+                void mcWebLogin().then((result) => {
+                  if (result.ok) onMcSessionChanged();
+                }).catch((e: unknown) => pushShell("cloud.connectFailed", "error", { params: { reason: errText(e) } }))
+                  .finally(() => { connectingCloud.current = false; });
+              },
             }}
             admin={{
               attentionIds,
@@ -710,7 +721,6 @@ function AppShell({ onTransportChanged }: { onTransportChanged: (generation: num
             initialSection={settingsInitialSection}
             onClose={closeSettings}
             hasRunningTask={sessions.some((s) => s.status === "running")}
-            onMcSessionChanged={onMcSessionChanged}
           />
         )}
       </div>

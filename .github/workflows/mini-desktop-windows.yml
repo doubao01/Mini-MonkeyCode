@@ -1,0 +1,112 @@
+name: Mini MonkeyCode Windows Shell
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["ui/desktop-uplift"]
+    paths:
+      - "desktop/**"
+      - "browser-extension/**"
+      - ".github/workflows/mini-desktop-windows.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mini-desktop-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows-shell:
+    runs-on: windows-2022
+    timeout-minutes: 90
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            desktop/ui-next/package-lock.json
+            browser-extension/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: desktop
+          key: mini-windows-shell
+
+      - name: Verify desktop UI changes
+        working-directory: desktop/ui-next
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx eslint src/components/SidePanel.tsx src/features/settings/ModelsSection.tsx src/features/settings/models src/features/settings/ModelSettings.test.tsx src/lib/util/clipboard.ts src/lib/ipc/modelDiscovery.ts
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm test -- src/features/settings/ModelSettings.test.tsx src/features/settings/SettingsView.test.tsx src/features/settings/settingsForm.test.ts src/features/settings/models/modelEditor.test.ts src/app/App.test.tsx src/components/SidePanel.test.tsx src/features/files/FilesPanel.test.tsx src/components/markdown/Markdown.test.tsx src/features/chat/ChatView.test.tsx src/features/cloud/CloudTaskView.test.tsx
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build companion browser extension
+        working-directory: browser-extension
+        run: |
+          npm ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Check command and bundle contracts
+        working-directory: desktop
+        run: |
+          python scripts/check_command_contract.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python scripts/check_bundle_configs.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Test Rust model discovery
+        working-directory: desktop
+        run: cargo test --locked --bin monkeycode-desktop model_discovery
+
+      - name: Build Windows desktop program without engine or installer
+        working-directory: desktop
+        run: npx --yes @tauri-apps/cli@^2 build --no-bundle --config bundle.cloud-shell.conf.json
+
+      - name: Prepare executable and provenance
+        working-directory: desktop
+        run: |
+          python scripts/check-pe-subsystem.py target/release/monkeycode-desktop.exe gui
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $out = "cloud-artifact"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item target/release/monkeycode-desktop.exe "$out/MonkeyCode++.exe"
+          Copy-Item ../browser-extension/dist "$out/browser-extension" -Recurse
+          Copy-Item CLOUD_BUILD.md "$out/README.md"
+          $hash = (Get-FileHash "$out/MonkeyCode++.exe" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  MonkeyCode++.exe" | Set-Content "$out/SHA256SUMS.txt" -Encoding utf8
+          @{
+            repository = "${{ github.repository }}"
+            commit = "${{ github.sha }}"
+            run = "https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            applicationId = "io.github.doubao01.minimonkeycode"
+            engineIncluded = $false
+            installerIncluded = $false
+          } | ConvertTo-Json | Set-Content "$out/build-info.json" -Encoding utf8
+          "## Windows 桌面程序构建完成`n`n- 产物：MonkeyCode++.exe 和浏览器扩展`n- 未包含引擎或安装器`n- SHA256：$hash" | Add-Content $env:GITHUB_STEP_SUMMARY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Mini-MonkeyCode-windows-x64-${{ github.run_number }}
+          path: desktop/cloud-artifact/
+          if-no-files-found: error
+          retention-days: 30

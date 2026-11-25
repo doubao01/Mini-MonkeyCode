@@ -39,6 +39,8 @@
             "core:window:allow-is-fullscreen",
             "core:window:allow-close",
             "allow-get-config",
+            "allow-models-discover",
+            "allow-models-discover-cancel",
             "allow-save-config",
             "allow-take-ui-intent",
             "allow-host-info",

@@ -589,9 +589,9 @@ export function CloudTaskView({
   return (
     // 外层 flex 行(与 ChatView 同构):主区 + 右侧侧边栏是兄弟列,底色上
     // 收到行容器,Root 退成透明列
-    <div className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${variant === "pane" ? "bg-transparent" : "mc-workbench-surface-100"}`}>
+    <div className={`@container/session flex min-h-0 min-w-0 flex-1 overflow-hidden ${variant === "pane" ? "bg-transparent" : "mc-workbench-surface-100"}`}>
     <Root
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent"
+      className={`relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent ${sideOpen ? "@max-[680px]/session:hidden" : ""}`}
       onDragEnter={onDragEnter}
       onDragOver={(e) => e.preventDefault()}
       onDragLeave={onDragLeave}
@@ -853,7 +853,7 @@ export function CloudTaskView({
         上游订阅,各开各的既费上游、又多一条与保活语义纠缠的连接);
         终端攥着 WS,切 tab 只藏不卸 */}
     {sideOpen && (
-      <SidePanel tabs={sideTabs} active={sideTab} onSelect={(id) => setSideTab(id as "files" | "terminal")}>
+      <SidePanel tabs={sideTabs} active={sideTab} onSelect={(id) => setSideTab(id as "files" | "terminal")} onClose={toggleSide}>
         {filesVisible && (
           <div className={sideTab === "files" ? "flex min-h-0 min-w-0 flex-1 flex-col" : "hidden"}>
             <CloudFiles taskId={h.id} vmId={h.ended ? undefined : h.vmId || undefined} borrowControl={h.borrowControl} />

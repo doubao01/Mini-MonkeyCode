@@ -1,4 +1,5 @@
 target/
+cloud-artifact/
 binaries/
 # python 字节码缓存(本地跑 scripts/ 的副产物)
 __pycache__/

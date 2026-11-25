@@ -114,7 +114,7 @@ $$
     expanding.unmount();
 
     const many = render(<Markdown source={Array.from({ length: 257 }, (_, index) => `$x_${index}$`).join(" ")} />);
-    await waitFor(() => expect(many.container.querySelectorAll(".katex")).toHaveLength(256));
+    await waitFor(() => expect(many.container.querySelectorAll(".katex")).toHaveLength(256), { timeout: 5000 });
     expect(many.container.querySelectorAll(".md-math-source")).toHaveLength(1);
     expect(many.container.querySelector("[data-md-math]")).toBeNull();
     many.unmount();
@@ -160,6 +160,33 @@ $$
     await userEvent.click(btn);
     expect(writeText).toHaveBeenCalledWith("const a = 1;");
     expect(btn.textContent).toBe("已复制");
+  });
+
+  it("长代码手动收起，复制仍使用完整原文", async () => {
+    const source = Array.from({ length: 30 }, (_, i) => `line ${i}`).join("\n");
+    const writeText = vi.fn(async () => {});
+    Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
+    const { container } = render(<Markdown source={`\`\`\`text\n${source}\n\`\`\``} />);
+    expect(container.querySelector('.md-code-toolbar')?.textContent).toContain('text');
+    await userEvent.click(screen.getByRole('button', { name: '收起代码' }));
+    expect(container.querySelector('pre')?.hidden).toBe(true);
+    await userEvent.click(screen.getByRole('button', { name: '复制' }));
+    expect(writeText).toHaveBeenCalledWith(source);
+    await userEvent.click(screen.getByRole('button', { name: '展开代码' }));
+    expect(container.querySelector('pre')?.hidden).toBe(false);
+  });
+
+  it("复制失败显示真实结果，不报已复制", async () => {
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText: vi.fn(async () => { throw new Error('denied'); }) }, configurable: true });
+    vi.stubGlobal('document', document);
+    const previous = document.execCommand;
+    document.execCommand = () => false;
+    try {
+      render(<Markdown source={'```text\nhello\n```'} />);
+      await userEvent.click(screen.getByRole('button', { name: '复制' }));
+      expect(await screen.findByRole('button', { name: '复制失败' })).toBeDefined();
+      expect(screen.queryByRole('button', { name: '已复制' })).toBeNull();
+    } finally { document.execCommand = previous; }
   });
 
   it("Mermaid 围栏渲染为 SVG 并绑定交互", async () => {

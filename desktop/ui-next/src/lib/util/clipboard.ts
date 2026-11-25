@@ -1,19 +1,18 @@
-// 复制到剪贴板:异步 API 不可用/被拒时回退 execCommand
-// (WebKitGTK 可能缺 API、WKWebView 会拒权限)。
-export function copyText(text: string): void {
-  const fallback = () => {
-    const ta = document.createElement("textarea");
-    ta.value = text;
-    ta.style.cssText = "position:fixed;opacity:0";
-    document.body.appendChild(ta);
-    ta.select();
-    document.execCommand("copy");
-    ta.remove();
-  };
-  const clipboard = navigator.clipboard;
-  if (clipboard?.writeText) {
-    clipboard.writeText(text).catch(fallback);
-  } else {
-    fallback();
-  }
+// 异步剪贴板失败后回退 execCommand；返回实际结果供代码块反馈使用。
+export async function copyTextResult(text: string): Promise<boolean> {
+  try {
+    if (navigator.clipboard?.writeText) { await navigator.clipboard.writeText(text); return true; }
+  } catch { /* 继续使用旧 WebView 剪贴板路径 */ }
+  const previous = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+  const textarea = document.createElement("textarea");
+  textarea.value = text;
+  textarea.style.cssText = "position:fixed;opacity:0";
+  document.body.appendChild(textarea);
+  try {
+    textarea.select();
+    return document.execCommand("copy");
+  } catch { return false; }
+  finally { textarea.remove(); if (previous?.isConnected) previous.focus(); }
 }
+
+export function copyText(text: string): void { void copyTextResult(text); }

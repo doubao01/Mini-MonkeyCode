@@ -16,6 +16,7 @@ mod background;
 mod baizhi;
 mod browser;
 mod config;
+mod model_discovery;
 mod driver;
 #[cfg(target_os = "windows")]
 mod native_pet;
@@ -1583,6 +1584,7 @@ fn main() {
         .manage(PetPos(Mutex::new(None)))
         .manage(MainWindowRuntime(Mutex::new(None)))
         .manage(EngineApply(Mutex::new(())))
+        .manage(model_discovery::ModelDiscovery::default())
         .manage(BrowserMcpRefresh(AtomicU64::new(0)))
         .manage(EngineSupervisor::new())
         .manage(baizhi::monkeycode::CloudPipes::new())
@@ -1592,6 +1594,8 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             get_config,
             save_config,
+            model_discovery::models_discover,
+            model_discovery::models_discover_cancel,
             take_ui_intent,
             host_info,
             show_main,

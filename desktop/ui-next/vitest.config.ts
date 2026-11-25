@@ -19,6 +19,7 @@ export default defineConfig({
           include: [
             "src/{lib,gen,app}/**/*.test.ts",
             "src/features/{chat/composer,cloud}/**/*.test.ts",
+            "src/features/settings/models/**/*.test.ts",
           ],
         },
       },

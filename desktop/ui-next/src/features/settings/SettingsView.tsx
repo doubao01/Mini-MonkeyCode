@@ -6,7 +6,7 @@
 //   sound-enabled 事件与托盘/桌宠双向同步);
 // - models/mcp/kernel_env 走保存条:save_config 全量写回(表单外字段从载入
 //   配置透传),壳保存后重启引擎——重启过程由全局引擎横幅外显,这里不管。
-import { IconAdjustmentsHorizontal, IconAlertTriangle, IconDice5, IconPhoto, IconRotate, IconTrash, IconWand, IconBrain, IconCheck, IconChevronDown, IconInfoCircle, IconServer, IconSparkles, IconTerminal2, IconUser, IconWorld, type TablerIcon } from "@tabler/icons-react";
+import { IconAdjustmentsHorizontal, IconAlertTriangle, IconDice5, IconPhoto, IconRotate, IconTrash, IconWand, IconBrain, IconCheck, IconChevronDown, IconInfoCircle, IconServer, IconSparkles, IconTerminal2, IconWorld, type TablerIcon } from "@tabler/icons-react";
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type KeyboardEvent as ReactKeyboardEvent, type ReactNode } from "react";
 
 import { resolveShortcut } from "@/app/shortcuts";
@@ -55,9 +55,7 @@ import { readUiScale, setUiScale, UI_SCALES, type UiScale } from "@/lib/uiScale"
 import { customThemeVars, randomTheme, roleHex, COLOR_ROLES, DEFAULT_CUSTOM, BORDER_RANGE, RADIUS_RANGE, SIZE_RANGE, type ColorRole } from "@/lib/customTheme";
 import { useDismiss } from "@/lib/util/useDismiss";
 import { useEscLayer } from "@/lib/util/escLayer";
-import { useMcTransport } from "@/lib/mcTransport";
-import { baizhiStatus } from "@/lib/ipc/account";
-import { AccountSection, type SyncApplied } from "@/features/account/AccountSection";
+import { applyModelEdit } from "./models/modelEditor";
 import { engineCaps } from "@/lib/ipc/approvals";
 import { AboutSection } from "./AboutSection";
 import { BrowserSection } from "./BrowserSection";
@@ -72,13 +70,12 @@ import {
   mergeSyncedMcps,
   mergeSyncedModels,
   payloadEquals,
-  removeSyncedSource,
   validateDraft,
   type DraftError,
   type SettingsDraft,
 } from "./settingsForm";
 
-export type SettingsSection = "general" | "account" | "models" | "mcp" | "skills" | "browser" | "env" | "about";
+export type SettingsSection = "general" | "models" | "mcp" | "skills" | "browser" | "env" | "about";
 
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
 
@@ -857,23 +854,19 @@ const FOCUSABLE =
 export const SettingsView = forwardRef<SettingsViewHandle, {
   /** restoreFocus=false 表示关闭后由跳转动作接管焦点。 */
   onClose: (restoreFocus?: boolean) => void;
-  /** 每次新挂载设置时采用的分区；普通设置入口仍默认账号页。 */
+  /** 每次新挂载设置时采用的分区；普通设置入口默认模型页。 */
   initialSection?: SettingsSection;
-  /** 有本地会话在跑(status==="running"):同步后不自动保存重启引擎,
-   * 隐式踹掉运行中的轮次不可接受;回退保存条由用户择机保存(旧 UI 同款口径) */
+  /** 运行中的本地任务结束前阻止配置写回和引擎重启。 */
   hasRunningTask?: boolean;
-  /** MonkeyCode 登录态变化后让 App 作废账号作用域数据。 */
-  onMcSessionChanged?: () => void;
 }>(function SettingsView(
-  { onClose, initialSection = "account", hasRunningTask = false, onMcSessionChanged },
+  { onClose, initialSection = "models", hasRunningTask = false },
   ref,
 ) {
   const { t } = useI18n();
-  const { generation: mcTransportGeneration, isCurrent: isMcTransportCurrent } = useMcTransport();
   // 离开确认(旧 UI App.tsx settingsDirty + window.confirm 的 daisyUI 版):
   // 脏表单直接退出 = 静默丢弃全部未保存编辑,必须先问一句
   const [leaveAsk, setLeaveAsk] = useState(false);
-  // 普通入口初始落账号分区(旧 UI 同款);带目标的工作台入口则在本次新挂载时
+  // 普通入口落模型分区；带目标的工作台入口则在本次新挂载时
   // 精确落到 initialSection。设置关闭会卸载，下次打开重新采用新的目标。
   const [section, setSection] = useState<SettingsSection>(initialSection);
   const [cfg, setCfg] = useState<DesktopConfig | null>(null);
@@ -881,14 +874,9 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
   const [draft, setDraft] = useState<SettingsDraft | null>(null);
   const [distros, setDistros] = useState<string[]>([]);
   const [browserExt, setBrowserExt] = useState(false);
-  // 模型页百智云空组的引导文案分两种(去同步 / 先登录),口径同旧 UI
-  const [bzLoggedIn, setBzLoggedIn] = useState(false);
+  const [modelModalOpen, setModelModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState("");
-  // 账号分区的版本点选/私有化「保存生效」触发的静默落盘:在途期间不渲染
-  // 保存条——用户视角里「切换版本」不该出现任何「保存」字样(2026-08-15
-  // 用户定案);失败才回落保存条外显错误
-  const [inlineSaving, setInlineSaving] = useState(false);
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const leaveDialogRef = useRef<HTMLDivElement | null>(null);
@@ -919,11 +907,6 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
     // 浏览器分区按引擎能力显隐:引擎不带扩展桥时整项不出现(旧 UI 同款门禁)。
     // caps 拿不到(浏览器模式/引擎未起)按不支持算,不给一个点进去必然报错的入口
     void engineCaps().then((caps) => alive && setBrowserExt(caps?.browser_ext === true));
-    // 登录态只为模型页空组的引导措辞,拿不到就按未登录说(读不到状态时那句
-    // 「先登录百智云」总是成立的),失败不外显
-    void baizhiStatus()
-      .then((s) => alive && setBzLoggedIn(!!s?.logged_in))
-      .catch(() => undefined);
     return () => {
       alive = false;
     };
@@ -942,6 +925,7 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
     afterApproved?.();
   };
   const requestClose = (afterApproved?: () => void) => {
+    if (modelModalOpen || saving) return;
     pendingCloseRef.current = afterApproved ?? null;
     if (dirty) {
       leaveFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
@@ -962,7 +946,7 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
   useImperativeHandle(ref, () => ({ requestClose }));
 
   const trapTab = (e: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (e.key !== "Tab") return;
+    if (e.key !== "Tab" || modelModalOpen) return;
     const root = leaveAsk ? leaveDialogRef.current : dialogRef.current;
     if (!root) return;
     const candidates = [...root.querySelectorAll<HTMLElement>(FOCUSABLE)].filter(
@@ -1004,6 +988,7 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
   // 视图层会被重新 push 到栈顶,浮层优先又白搭了——故用 ref 读最新闭包。
   const escRef = useRef<() => boolean>(() => false);
   escRef.current = () => {
+    if (modelModalOpen || saving) return true;
     if (blurIfTyping()) return true; // 输入态只收敛焦点,绝不连带丢弃编辑
     if (leaveAsk) return true; // 确认弹层在场(它自己那层会先消费,这里兜底)
     requestClose();
@@ -1021,76 +1006,46 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
   );
 
   const updateDraft = (up: (d: SettingsDraft) => SettingsDraft) => {
-    setDraft((d) => (d ? up(d) : d));
+    if (draftRef.current) {
+      const next = up(draftRef.current);
+      draftRef.current = next;
+      setDraft(next);
+    }
     setSaveError("");
   };
 
   const discard = () => {
-    if (cfg) setDraft(draftFromConfig(cfg));
+    if (cfg) {
+      draftRef.current = draftFromConfig(cfg);
+      setDraft(draftRef.current);
+    }
     setSaveError("");
   };
 
-  // 账号页同步结果并入草稿(整组替换,纯逻辑在 settingsForm);跳过名单
-  // (跨组撞名先到先得)返回给账号卡就地外显。
-  // 自动保存决策(旧 UI settings.tsx autoSaveDecision 随迁,2026-08-06
-  // 用户报障"同步不自动保存了"即此回归):同步前表单干净且无任务在跑 →
-  // 直接走保存主路径,免手动点保存;脏表单(不能捎带用户没确认的修改)/
-  // 有任务在跑(保存重启引擎会踹掉运行轮次)→ 回退保存条,原因给卡片外显。
-  // 基准取 ref 而非闭包:同步是"发请求→等数秒→回来再合并",登录顺带的
-  // 双路同步(百智云+会员)先后到达,拿闭包里的旧草稿会把先到的一路抹掉
+  // 同步按最新草稿整组合并，结果等待用户确认保存，不连带自动写回其他更改。
   const draftRef = useRef<SettingsDraft | null>(null);
   draftRef.current = draft;
   const cfgRef = useRef<DesktopConfig | null>(null);
   cfgRef.current = cfg;
   const savingRef = useRef(false);
   savingRef.current = saving;
-  const applySync = (r: BaizhiSyncResult | McModelsSyncResult): SyncApplied | undefined => {
-    let next = draftRef.current;
-    const conf = cfgRef.current;
-    if (!next || !conf) return undefined;
-    // 脏判定必须在合并前(合并后恒脏);与保存条同一口径(载荷比较)
-    const wasDirty = !payloadEquals(buildPayload(conf, next), buildPayload(conf, draftFromConfig(conf)));
-    const fromBaizhi = "mcp_servers" in r;
-    const source = r.models[0]?.source || (fromBaizhi ? SOURCE_BAIZHI : SOURCE_MONKEYCODE);
-    let skipped: string[] = [];
-    const merged = mergeSyncedModels(next, r.models, source);
-    if (merged) {
-      next = merged.draft;
-      skipped = merged.skipped;
-    }
-    if (fromBaizhi) next = mergeSyncedMcps(next, r.mcp_servers);
-    draftRef.current = next;
-    setDraft(next);
-    setSaveError("");
-    // 保存在途(双路同步第一路刚落地):不再起一次——在途那次的补存循环
-    // 收尾时会发现草稿又变了,自己再存一轮(见 save()),所以对用户仍是
-    // 「已自动保存」,不必回退保存条
-    if (savingRef.current) return { skipped, autoSaved: true };
-    if (wasDirty) return { skipped, autoSaved: false, blocked: "dirty" };
-    if (hasRunningTask) return { skipped, autoSaved: false, blocked: "busy" };
-    void save(next);
-    return { skipped, autoSaved: true };
+  const applySync = (r: BaizhiSyncResult | McModelsSyncResult) => {
+    updateDraft((current) => {
+      const fromBaizhi = "mcp_servers" in r;
+      const source = r.models[0]?.source || (fromBaizhi ? SOURCE_BAIZHI : SOURCE_MONKEYCODE);
+      const next = mergeSyncedModels(current, r.models, source)?.draft ?? current;
+      return fromBaizhi ? mergeSyncedMcps(next, r.mcp_servers) : next;
+    });
   };
 
-  /** 断开 MonkeyCode 后清掉会员模型组(旧 UI disconnectMcWithCleanup 第四步)。
-   *  自动保存决策与 applySync 同一套口径:干净表单且无任务在跑就直接落盘,
-   *  否则退回保存条并说明原因。返回 undefined = 本来就没有会员条目,无事可做。 */
-  const applyMcDisconnect = (): SyncApplied | undefined => {
-    const cur = draftRef.current;
-    const conf = cfgRef.current;
-    if (!cur || !conf) return undefined;
-    const wasDirty = !payloadEquals(buildPayload(conf, cur), buildPayload(conf, draftFromConfig(conf)));
-    const next = removeSyncedSource(cur, SOURCE_MONKEYCODE);
-    if (!next) return undefined;
-    draftRef.current = next;
-    setDraft(next);
-    setSaveError("");
-    if (savingRef.current) return { skipped: [], autoSaved: true };
-    if (wasDirty) return { skipped: [], autoSaved: false, blocked: "dirty" };
-    if (hasRunningTask) return { skipped: [], autoSaved: false, blocked: "busy" };
-    void save(next);
-    return { skipped: [], autoSaved: true };
-  };
+  const pendingChanges: string[] = [];
+  if (cfg && draft) {
+    const saved = draftFromConfig(cfg);
+    if (JSON.stringify(saved.models) !== JSON.stringify(draft.models) || saved.defaultIdx !== draft.defaultIdx) pendingChanges.push(t("settings.models.modelsChanges"));
+    if (JSON.stringify(saved.mcps) !== JSON.stringify(draft.mcps)) pendingChanges.push(t("settings.models.mcpChanges"));
+    if (saved.kernelEnv !== draft.kernelEnv) pendingChanges.push(t("settings.models.runtimeChanges"));
+    if (saved.mcBaseUrl !== draft.mcBaseUrl || saved.mcBasicAuth !== draft.mcBasicAuth || saved.mcLlmBaseUrl !== draft.mcLlmBaseUrl || saved.mcSkipTlsVerify !== draft.mcSkipTlsVerify) pendingChanges.push(t("settings.models.serviceChanges"));
+  }
 
   const draftErrText = (e: DraftError): string => {
     switch (e.kind) {
@@ -1109,56 +1064,53 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
     }
   };
 
-  /** target:同步自动保存传入合并后的草稿(state 提交尚未落地,闭包里的
-   * draft 是旧值);保存条点击不传,存当前草稿。
-   *
-   * 补存循环(旧 UI performSave 随迁,ui-next 首版漏迁 → 2026-08-06 用户报障
-   * 「扫码之后还要手动保存」):一次保存要写盘 + 重启内核(数秒),期间表单
-   * 可能又被并入新的同步结果——扫码登录顺带桥接 MonkeyCode,百智云与会员
-   * 模型两路同步先后落地,第二路正好撞在第一路的保存在途期(applySync 见
-   * savingRef 就只合并不保存,把收尾交给这里)。存到表单不再变化为止,轮数
-   * 设上限兜底:不收敛就停手交给保存条,不无休止地重启内核。 */
-  const save = async (target?: SettingsDraft) => {
+  /** 保存用户确认的配置快照，并返回实际结果供顶层弹窗决定是否关闭。 */
+  const save = async (target?: SettingsDraft): Promise<string | null> => {
+    if (savingRef.current) return t("settings.models.busy");
+    if (hasRunningTask) return t("settings.models.runningHint");
     const conf = cfgRef.current;
-    let d = target ?? draft;
-    if (!conf || !d) return;
-    const invalid = validateDraft(d);
+    const start = draftRef.current;
+    const candidate = target ?? start;
+    if (!conf || !candidate) return t("settings.models.busy");
+    const invalid = validateDraft(candidate);
     if (invalid) {
-      setSaveError(draftErrText(invalid));
-      return;
+      const message = draftErrText(invalid);
+      setSaveError(message);
+      return message;
     }
-    setSaving(true);
     savingRef.current = true;
+    setSaving(true);
     setSaveError("");
+    const p = buildPayload(conf, candidate);
     try {
-      for (let round = 0; ; round++) {
-        const p = buildPayload(conf, d);
-        await saveConfig(p);
-        // 保存即真值:壳按载荷写盘(壳自有偏好以磁盘合并,不在本类型内)
-        setCfg(p);
-        // 在途期间草稿没再变:表单态重建为已保存形态,保存条随之收起;
-        // 引擎重启由横幅外显
-        const cur = draftRef.current;
-        if (!cur || payloadEquals(buildPayload(conf, cur), p)) {
-          setDraft((c) => (c === d || c === cur ? draftFromConfig(p) : c));
-          break;
-        }
-        // 变过了:再存一轮。轮数用尽或新草稿校验不过就保留草稿(dirty →
-        // 保存条兜底),绝不回读已保存形态覆盖——那会把后到的同步条目抹掉
-        if (round >= 2 || validateDraft(cur)) break;
-        d = cur;
+      await saveConfig(p);
+      cfgRef.current = p;
+      setCfg(p);
+      // 只提交用户确认的快照；在途出现的新草稿留在保存条，不自动重启第二次。
+      if (draftRef.current === start) {
+        draftRef.current = draftFromConfig(p);
+        setDraft(draftRef.current);
       }
+      return null;
     } catch (e) {
-      setSaveError(errMsg(e)); // 壳的 Err 是中文,直接外显
+      let message = errMsg(e);
+      // 壳可能已写盘但引擎重启失败，回读确认，避免提示“未保存”掩盖落盘事实。
+      const disk = await getConfig().catch(() => null);
+      if (disk && payloadEquals(buildPayload(disk, draftFromConfig(disk)), buildPayload(p, draftFromConfig(p)))) {
+        cfgRef.current = disk;
+        setCfg(disk);
+        message = t("settings.models.recovery", { message });
+      }
+      setSaveError(message);
+      return message;
     } finally {
-      setSaving(false);
       savingRef.current = false;
+      setSaving(false);
     }
   };
 
   const items: Array<{ id: SettingsSection; label: string; desc: string; icon: TablerIcon }> = [
     { id: "general", label: t("settings.nav.general"), desc: t("settings.desc.general"), icon: IconAdjustmentsHorizontal },
-    { id: "account", label: t("settings.nav.account"), desc: t("settings.desc.account"), icon: IconUser },
     { id: "models", label: t("settings.nav.models"), desc: t("settings.desc.models"), icon: IconBrain },
     { id: "mcp", label: t("settings.nav.mcp"), desc: t("settings.desc.mcp"), icon: IconServer },
     { id: "skills", label: t("settings.nav.skills"), desc: t("settings.desc.skills"), icon: IconSparkles },
@@ -1187,38 +1139,16 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
     switch (section) {
       case "general":
         return <GeneralSection />;
-      case "account":
-        // 账号分区不吃壳配置(登录态自查、浏览器降级自带),不走 configGate;
-        // 同步结果经 applySync 并入模型/MCP 草稿。草稿另供自建部署高级块编辑
-        //(拿不到配置时该块自行隐去,不影响登录主路径)
-        return (
-          <AccountSection
-            onSyncResult={applySync}
-            onMcDisconnected={applyMcDisconnect}
-            onMcSessionChanged={onMcSessionChanged}
-            draft={draft}
-            onDraft={updateDraft}
-            refreshKey={mcTransportGeneration}
-            isRefreshKeyCurrent={isMcTransportCurrent}
-            savedMcBaseUrl={cfg?.mc_base_url ?? ""}
-            savedMcBasicAuth={cfg?.mc_basic_auth ?? ""}
-            savedMcLlmBaseUrl={cfg?.mc_llm_base_url ?? ""}
-            savedMcSkipTlsVerify={cfg?.mc_skip_tls_verify ?? false}
-            // 版本点选即静默落盘:savingRef 防重入(save 自身不防并发);
-            // inlineSaving 让保存条在途不出现。与已保存配置无差异就跳过
-            // ——按载荷对比(与脏判定同口径):点回当前生效的版本不值得
-            // 白写一次盘、白重启一次引擎
-            onApplyDraft={(d) => {
-              if (savingRef.current) return;
-              if (cfg && baseline && payloadEquals(buildPayload(cfg, d), baseline)) return;
-              setInlineSaving(true);
-              void save(d).finally(() => setInlineSaving(false));
-            }}
-            saveBusy={saving}
-          />
-        );
       case "models":
-        return draft ? <ModelsSection draft={draft} onDraft={updateDraft} baizhiLoggedIn={bzLoggedIn} /> : configGate;
+        return draft ? <ModelsSection draft={draft} onDraft={updateDraft} onModalChange={setModelModalOpen}
+          changes={pendingChanges} blocked={hasRunningTask || saving} onSync={applySync}
+          onSave={async (original, model) => {
+            const current = draftRef.current;
+            if (!current) return t("settings.models.busy");
+            const next = applyModelEdit(current, original, model);
+            if (!next) return t("settings.models.conflict");
+            return save(next);
+          }} /> : configGate;
       case "mcp":
         return draft ? <McpSection draft={draft} onDraft={updateDraft} /> : configGate;
       case "skills":
@@ -1246,8 +1176,8 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
     >
       <div
         ref={dialogRef}
+        inert={modelModalOpen || leaveAsk}
         className="modal-box flex h-[min(84vh,760px)] w-[min(960px,92vw)] max-w-[min(960px,92vw)] flex-col overflow-hidden bg-base-100 p-0"
-        inert={leaveAsk ? true : undefined}
       >
       <header className="flex h-10 shrink-0 items-center gap-2 border-b border-base-300 px-4">
         <h1 id="settings-dialog-title" className="text-sm font-semibold">{t("settings.title")}</h1>
@@ -1281,10 +1211,10 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
           {/* 内容列居中收窄:阅读宽度稳定,分区排版不随窗宽漂移。
               [scrollbar-gutter:stable] 见 LAYOUT §5:各分区长短不一,不留滚条
               槽位的话在长短分区间切换时居中内容列左右晃约 5px */}
-          <div className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable] px-6 py-5">
-            <div className="mx-auto flex w-full max-w-2xl flex-col gap-5">
+          <div className={`min-h-0 flex-1 overflow-x-hidden px-4 py-5 sm:px-6 ${section === "models" ? "overflow-y-hidden" : "overflow-y-auto [scrollbar-gutter:stable]"}`}>
+            <div className={`mx-auto flex w-full flex-col gap-5 ${section === "models" ? "h-full min-h-0" : "max-w-2xl"}`}>
               {/* 技能分区把标题与高频动作并为一个页头，避免说明和按钮在两行互相挤压。 */}
-              {section !== "skills" && (
+              {section !== "skills" && section !== "models" && (
                 <header className="flex flex-col gap-1">
                   {/* text-lg:应用最大字号档(欢迎页/新建任务同档),不再独一档 text-xl */}
                   <h2 className="text-lg font-bold">{active?.label}</h2>
@@ -1294,8 +1224,8 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
               {body()}
             </div>
           </div>
-          {/* 保存条:结构线贴底。版本切换的静默落盘在途不出现(见 inlineSaving) */}
-          {dirty && !inlineSaving && (
+          {/* 默认项、删除与其他设置共用保存入口。 */}
+          {dirty && (
             <div className="flex shrink-0 items-center gap-2 border-t border-base-300 bg-base-100 px-4 py-2">
               <span className="text-xs text-base-content/70">{t("settings.save.dirty")}</span>
               {saveError && (
@@ -1307,7 +1237,7 @@ export const SettingsView = forwardRef<SettingsViewHandle, {
               <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={discard}>
                 {t("settings.save.discard")}
               </button>
-              <button type="button" className="btn btn-primary btn-sm" disabled={saving} onClick={() => void save()}>
+              <button type="button" className="btn btn-primary btn-sm" disabled={saving || hasRunningTask} title={hasRunningTask ? t("settings.models.runningHint") : undefined} onClick={() => void save()}>
                 {saving && <span className="loading loading-spinner loading-xs" aria-hidden />}
                 {t("settings.save.confirm")}
               </button>

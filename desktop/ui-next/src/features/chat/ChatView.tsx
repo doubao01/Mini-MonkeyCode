@@ -1060,10 +1060,10 @@ export function ChatView({
   return (
     <div
       data-design-preview-open={sideOpen && sideTab === "preview" && previewTarget ? "true" : undefined}
-      className={`flex min-h-0 min-w-0 flex-1 overflow-hidden ${pane ? "bg-transparent" : "mc-workbench-surface-100"}`}
+      className={`@container/session flex min-h-0 min-w-0 flex-1 overflow-hidden ${pane ? "bg-transparent" : "mc-workbench-surface-100"}`}
     >
     <Root
-      className="relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent"
+      className={`relative flex min-h-0 min-w-0 flex-1 flex-col bg-transparent ${sideOpen ? "@max-[680px]/session:hidden" : ""}`}
       onDragEnter={onDragEnter}
       onDragOver={(e) => e.preventDefault()}
       onDragLeave={onDragLeave}
@@ -1411,7 +1411,7 @@ export function ChatView({
         的工作台在 target 在场时同样常驻——切 tab 只藏不卸,原生预览
         webview 不必反复重建(obscured 驱动壳侧 hide/show)。 */}
     {sideOpen && (
-      <SidePanel tabs={sideTabs} active={sideTab} onSelect={selectSideTab}>
+      <SidePanel tabs={sideTabs} active={sideTab} onSelect={selectSideTab} onClose={toggleSide}>
         <div className={sideTab === "files" || sideTab === "changes" ? "flex min-h-0 min-w-0 flex-1" : "hidden"}>
           <FilesPanel
             key={meta.id}

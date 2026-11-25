@@ -120,7 +120,7 @@ describe("设置入口(外观/语言/配置在 SettingsView,各有专测)", () =
     expect(screen.getAllByRole("dialog", { name: "设置" })).toHaveLength(1);
   });
 
-  it("当前会话技能菜单精确打开技能分区，下次普通打开重新采用账号分区", async () => {
+  it("当前会话技能菜单精确打开技能分区，下次普通打开重新采用模型分区", async () => {
     localStorage.setItem("mc.splitSlots", JSON.stringify(["s1", null, null, null, null, null]));
     stubShell({ sessions: [sess({ id: "s1", title: "任务一" })] });
     render(<App />);
@@ -134,7 +134,7 @@ describe("设置入口(外观/语言/配置在 SettingsView,各有专测)", () =
     await userEvent.click(within(dialog).getByRole("button", { name: "关闭" }));
     fireEvent.keyDown(window, { key: ",", code: "Comma", ctrlKey: true });
     dialog = screen.getByRole("dialog", { name: "设置" });
-    expect(within(dialog).getByRole("button", { name: "账号" }).getAttribute("aria-current")).toBe("page");
+    expect(within(dialog).getByRole("button", { name: "模型" }).getAttribute("aria-current")).toBe("page");
   });
 
   it("设置齿轮沉在任务列底部，关闭模态后恢复同一工作台", async () => {
@@ -521,7 +521,7 @@ describe("MonkeyCode transport 切换", () => {
     await waitFor(() => expect(shell.count("mc_projects")).toBeGreaterThan(projectsBefore));
   });
 
-  it("设置页重新登录后立即恢复 Sidebar 登录态、任务和项目", async () => {
+  it("独立登录窗连接后立即恢复 Sidebar 登录态、任务和项目", async () => {
     let loggedIn = false;
     const shell = stubShell({
       extra: {
@@ -534,7 +534,7 @@ describe("MonkeyCode transport 切换", () => {
             ? { tasks: [{ id: "fresh-task", title: "重新登录后的任务", status: "processing" }], page_info: { total: 1 } }
             : Promise.reject(new Error("Unauthorized")),
         mc_projects: () => loggedIn ? { projects: [{ id: "fresh-project", name: "重新登录后的项目" }] } : { projects: [] },
-        mc_password_login: () => {
+        mc_web_login: () => {
           loggedIn = true;
           return { ok: true };
         },
@@ -549,16 +549,10 @@ describe("MonkeyCode transport 切换", () => {
     const tasksBefore = shell.count("mc_tasks");
     const projectsBefore = shell.count("mc_projects");
 
-    await userEvent.click(screen.getByRole("button", { name: "去设置连接" }));
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
-    await userEvent.click(await screen.findByRole("tab", { name: "密码" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "邮箱" }), "user@example.com");
-    await userEvent.type(screen.getByLabelText("密码"), "secret");
-    await userEvent.click(screen.getByRole("button", { name: "登录" }));
+    await userEvent.click(screen.getByRole("button", { name: "连接云端" }));
 
     await waitFor(() => expect(shell.count("mc_tasks")).toBeGreaterThan(tasksBefore));
     await waitFor(() => expect(shell.count("mc_projects")).toBeGreaterThan(projectsBefore));
-    await userEvent.click(screen.getByText("关闭", { selector: "button" }));
     expect(await screen.findByText("重新登录后的任务")).toBeTruthy();
     expect(await screen.findByText("重新登录后的项目")).toBeTruthy();
   });

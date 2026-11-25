@@ -1,0 +1,14 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "MonkeyCode++",
+  "identifier": "io.github.doubao01.minimonkeycode",
+  "bundle": {
+    "active": false,
+    "icon": ["icons/icon.ico", "icons/icon.png"]
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": []
+    }
+  }
+}

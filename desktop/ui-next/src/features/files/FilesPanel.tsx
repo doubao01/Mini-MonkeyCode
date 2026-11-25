@@ -251,9 +251,9 @@ export function FilesPanel({
   const SCROLL = "overflow-x-hidden overflow-y-auto [scrollbar-gutter:stable]";
 
   return (
-    <section aria-label={t("files.label")} className="flex min-h-0 min-w-0 flex-1">
+    <section aria-label={t("files.label")} className="@container/files flex min-h-0 min-w-0 flex-1">
       {/* 左列:文件树/变更列表(拖宽把手在右缘) */}
-      <div ref={listStartRef} style={{ width: treeWidth }} className="flex max-w-[60%] shrink-0 flex-col">
+      <div ref={listStartRef} style={{ width: treeWidth }} className={`flex max-w-[60%] shrink-0 flex-col @max-[580px]/files:!w-full @max-[580px]/files:max-w-none ${preview ? "@max-[580px]/files:hidden" : ""}`}>
         <header className="flex h-9 shrink-0 items-center gap-1 border-b border-base-300 px-3">
           <span className="min-w-0 flex-1 truncate text-xs font-semibold text-base-content/70">
             {tab === "changes" ? t("side.tab.changes") : t("files.treeTitle")}
@@ -332,14 +332,15 @@ export function FilesPanel({
             return next;
           });
         }}
-        className={`relative z-10 -mx-0.5 w-1.5 shrink-0 cursor-col-resize focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-inset ${
+        className={`relative z-10 -mx-0.5 w-1.5 shrink-0 cursor-col-resize @max-[580px]/files:hidden focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60 focus-visible:ring-inset ${
           draggingTree ? "bg-primary/40" : "hover:bg-primary/20 focus-visible:bg-primary/20"
         }`}
       >
         <span aria-hidden className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-base-300" />
       </div>
       {/* 右区:预览(mockup 空态「选择要预览的文件」) */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className={`flex min-w-0 flex-1 flex-col ${preview ? "" : "@max-[580px]/files:hidden"}`}>
+        {preview && <button type="button" className="btn btn-ghost btn-sm hidden shrink-0 justify-start rounded-none @max-[580px]/files:flex" onClick={closePreview}>{t("files.backToList")}</button>}
         {preview ? (
           <Preview
             model={preview}

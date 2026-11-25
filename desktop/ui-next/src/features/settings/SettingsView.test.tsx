@@ -90,7 +90,7 @@ const windowsUA = () =>
 
 const openModels = async () => {
   await userEvent.click(screen.getByRole("button", { name: "模型" }));
-  await waitFor(() => expect(screen.getByRole("button", { name: /主力/ })).toBeDefined());
+  await waitFor(() => expect(screen.getByRole("button", { name: "主力" })).toBeDefined());
 };
 
 describe("设置视图:导航与载入", () => {
@@ -102,80 +102,8 @@ describe("设置视图:导航与载入", () => {
     }
     expect(screen.queryByRole("button", { name: "运行环境" })).toBeNull();
     await openModels();
-    expect(screen.getByRole("button", { name: /备用/ })).toBeDefined();
+    expect(screen.getByRole("button", { name: "备用" })).toBeDefined();
     expect(screen.getByText("默认")).toBeDefined(); // 主力行的默认徽标
-  });
-
-  it("导航含「账号」,点击挂载账号分区(国内版登录 tab 可见)", async () => {
-    // 未知命令(baizhi_status 等)回 null,分区按未登录形态渲染;
-    // mc_base_url 置空 = 官方云国内版——登录方式按生效版本裁剪,
-    // baseConfig 的私有地址会走仅账密形态(AccountSection 自有测试钉住)
-    stubShell({ config: { ...baseConfig, mc_base_url: "" } });
-    render(<SettingsView onClose={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
-    expect(await screen.findByRole("tab", { name: "微信扫码" })).toBeDefined();
-    expect(screen.getByRole("tab", { name: "短信" })).toBeDefined();
-    expect(screen.getByRole("tab", { name: "密码" })).toBeDefined();
-    // 拉码命令回 null → 状态机按失败收束,给出重试入口(不留悬空 loading)
-    expect(await screen.findByRole("button", { name: "重新获取二维码" })).toBeDefined();
-  });
-
-  it("账号分区点选国际版:静默落盘生效,全程不露保存条,登录方式随即翻为仅账密", async () => {
-    let resolveSave: (() => void) | undefined;
-    const { calls } = stubShell({
-      config: { ...baseConfig, mc_base_url: "" },
-      save: () =>
-        new Promise<null>((res) => {
-          resolveSave = () => res(null);
-        }),
-    });
-    render(<SettingsView onClose={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
-    await screen.findByRole("tab", { name: "微信扫码" });
-    await userEvent.click(screen.getByRole("radio", { name: "国际版" }));
-    // 点选即保存(用户视角没有「保存」这回事):落盘在途,微信码撤下、
-    // 保存条不闪现(2026-08-15 用户报障:能看到保存按钮一闪而过)
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    expect(screen.queryByRole("tab")).toBeNull();
-    expect(screen.queryByRole("button", { name: "放弃" })).toBeNull();
-    expect(screen.queryByText(/有未保存的修改/)).toBeNull();
-
-    resolveSave?.();
-    const saved = calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig;
-    expect(saved.mc_base_url).toBe("https://monkeycode-ai.net");
-    // 保存即真值:生效版本翻为国际版,登录区变为仅账密表单;保存条依旧不出现
-    expect(await screen.findByRole("textbox", { name: "邮箱" })).toBeDefined();
-    expect(screen.queryByRole("tab")).toBeNull();
-    expect(screen.queryByText(/有未保存的修改/)).toBeNull();
-  });
-
-  it("切到私有化再点回国内版(配置本就是国内版):不触发保存,登录 tabs 直接回来", async () => {
-    const { calls } = stubShell({ config: { ...baseConfig, mc_base_url: "" } });
-    render(<SettingsView onClose={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
-    await screen.findByRole("tab", { name: "微信扫码" });
-    await userEvent.click(screen.getByRole("radio", { name: "私有化部署" }));
-    expect(screen.queryByRole("tab")).toBeNull();
-    await userEvent.click(screen.getByRole("radio", { name: "国内版" }));
-    // 与已保存配置无差异:按载荷对比跳过落盘,不白重启引擎
-    expect(await screen.findByRole("tab", { name: "微信扫码" })).toBeDefined();
-    expect(screen.queryByText(/版本切换未生效/)).toBeNull();
-    expect(calls.some((c) => c.cmd === "save_config")).toBe(false);
-  });
-
-  it("国际版配置下切私有化再点国内版:保存条不弹,直接落盘切换,不误报「版本切换未生效」", async () => {
-    const { calls } = stubShell({ config: { ...baseConfig, mc_base_url: "https://monkeycode-ai.net" } });
-    render(<SettingsView onClose={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
-    await screen.findByRole("textbox", { name: "邮箱" }); // 国际版 = 账密表单
-    await userEvent.click(screen.getByRole("radio", { name: "私有化部署" }));
-    expect(screen.queryByText(/有未保存的修改/)).toBeNull(); // 光点选不弄脏表单
-    await userEvent.click(screen.getByRole("radio", { name: "国内版" }));
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    const saved = calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig;
-    expect(saved.mc_base_url).toBe("");
-    expect(await screen.findByRole("tab", { name: "微信扫码" })).toBeDefined();
-    expect(screen.queryByText(/版本切换未生效/)).toBeNull();
   });
 
   it("关闭按钮回调 onClose", async () => {
@@ -211,30 +139,13 @@ describe("Esc 分层与离开守卫", () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("在输入框里按 Esc:只收敛焦点,不退出、不丢弃未保存的编辑", async () => {
-    stubShell();
-    const onClose = vi.fn();
-    render(<SettingsView onClose={onClose} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    const name = screen.getByRole("textbox", { name: "名称" });
-    await userEvent.clear(name);
-    await userEvent.type(name, "主力2");
-    expect(document.activeElement).toBe(name);
-
-    pressEsc();
-    expect(onClose).not.toHaveBeenCalled();
-    expect(document.activeElement).not.toBe(name); // 焦点收敛
-    expect((screen.getByRole("textbox", { name: "名称" }) as HTMLInputElement).value).toBe("主力2");
-  });
-
   it("脏表单上 Esc/关闭:先问一句;「留在设置」不退,「放弃并离开」才退", async () => {
     stubShell();
     const onClose = vi.fn();
     render(<SettingsView onClose={onClose} />);
     await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    await userEvent.type(screen.getByRole("textbox", { name: "名称" }), "x");
+    await userEvent.click(screen.getByRole("button", { name: "备用的更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "设为默认" }));
 
     await userEvent.click(screen.getByRole("button", { name: "关闭" }));
     expect(await screen.findByRole("dialog", { name: "有未保存的更改" })).toBeDefined();
@@ -272,8 +183,8 @@ describe("Esc 分层与离开守卫", () => {
     const afterApproved = vi.fn();
     render(<SettingsView ref={ref} onClose={onClose} />);
     await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    await userEvent.type(screen.getByRole("textbox", { name: "名称" }), "x");
+    await userEvent.click(screen.getByRole("button", { name: "备用的更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "设为默认" }));
 
     await act(async () => ref.current?.requestClose(afterApproved));
     expect(await screen.findByRole("dialog", { name: "有未保存的更改" })).toBeDefined();
@@ -295,8 +206,8 @@ describe("Esc 分层与离开守卫", () => {
       </>,
     );
     await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    await userEvent.type(screen.getByRole("textbox", { name: "名称" }), "x");
+    await userEvent.click(screen.getByRole("button", { name: "备用的更多操作" }));
+    await userEvent.click(screen.getByRole("menuitem", { name: "设为默认" }));
     await userEvent.click(screen.getByRole("button", { name: "外部通知" }));
 
     await act(async () => ref.current?.requestClose(() => {}));
@@ -315,7 +226,7 @@ describe("Esc 分层与离开守卫", () => {
         <button type="button">模态外按钮</button>
       </>,
     );
-    await screen.findByRole("radio", { name: "国内版" });
+    await userEvent.click(screen.getByRole("button", { name: "通用" }));
     const dialog = screen.getByRole("dialog", { name: "设置" });
 
     for (let i = 0; i < 40; i += 1) {
@@ -355,215 +266,6 @@ describe("脏状态机与保存条", () => {
     expect(saved.mcp_servers).toMatchObject({ files: { url: "https://x" } });
   });
 
-  it("改动 → 保存条现身;放弃 → 草稿还原、保存条收起", async () => {
-    stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
-
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    const name = screen.getByRole("textbox", { name: "名称" });
-    await userEvent.clear(name);
-    await userEvent.type(name, "主力2");
-    expect(screen.getByRole("button", { name: "保存" })).toBeDefined();
-    expect(screen.getByText(/有未保存的修改/).textContent).toContain("重启引擎");
-
-    await userEvent.click(screen.getByRole("button", { name: "放弃" }));
-    expect((screen.getByRole("textbox", { name: "名称" }) as HTMLInputElement).value).toBe("主力");
-    expect(screen.queryByRole("button", { name: "保存" })).toBeNull();
-  });
-
-  it("保存:save_config 全量写回(default 重算、MCP 序列化、表单外字段透传),成功后保存条收起", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    const name = screen.getByRole("textbox", { name: "名称" });
-    await userEvent.clear(name);
-    await userEvent.type(name, "主力2");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    const payload = calls.find((c) => c.cmd === "save_config")?.args?.config;
-    expect(payload).toEqual({
-      models: [
-        { name: "主力2", provider: "anthropic", base_url: "https://a", api_key: "k1", model: "claude", default: true },
-        { name: "备用", provider: "openai", base_url: "https://b", api_key: "k2", model: "gpt", default: false },
-      ],
-      mcp_servers: { fetch: { url: "https://mcp" } },
-      kernel_env: "",
-      // 自建部署各项由草稿写回(未编辑即载入原值;未配置的写空串 = 官方云)
-      mc_base_url: "https://mc.example",
-      mc_basic_auth: "",
-      mc_llm_base_url: "",
-      mc_skip_tls_verify: false,
-    });
-    await waitFor(() => expect(screen.queryByRole("button", { name: "保存" })).toBeNull());
-  });
-
-  it("保存失败:壳的中文 Err 外显在保存条,条不收起", async () => {
-    stubShell({ save: () => Promise.reject(new Error("引擎启动失败: 模型配置无效")) });
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    await userEvent.type(screen.getByRole("textbox", { name: "名称" }), "x");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("引擎启动失败: 模型配置无效"));
-    expect(screen.getByRole("button", { name: "保存" })).toBeDefined();
-  });
-
-  it("校验拦截:清空模型名点保存,不发 save_config 且外显错误", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    await userEvent.clear(screen.getByRole("textbox", { name: "名称" }));
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    expect(screen.getByRole("alert").textContent).toContain("模型名称不能为空");
-    expect(calls.some((c) => c.cmd === "save_config")).toBe(false);
-  });
-});
-
-describe("模型增删改与设默认", () => {
-  it("会员模型行不出高级项摘要(窗口/输出/图片/思考档一概不列)", async () => {
-    // 用户定案 2026-08-09:这几项都是随同步整组下来的,会员行不可展开、
-    // 表单里也没有它们,用户一项都改不了。advSummary 的前提(「我配过的值
-    // 收起来看不见」)在会员行上不成立,剩下只是把每行撑长的噪音
-    stubShell({
-      config: {
-        ...baseConfig,
-        models: [
-          ...baseConfig.models,
-          {
-            name: "会员-高级",
-            provider: "anthropic",
-            base_url: "https://mc",
-            api_key: "mk",
-            model: "claude-x",
-            default: false,
-            source: "monkeycode",
-            context_window: 200000,
-            max_output: 64000,
-            vision: true,
-            think: "high",
-          },
-          {
-            name: "自定义-同参数",
-            provider: "anthropic",
-            base_url: "https://c",
-            api_key: "ck",
-            model: "claude-y",
-            default: false,
-            context_window: 200000,
-            max_output: 64000,
-            vision: true,
-            think: "high",
-          },
-        ],
-      },
-    });
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-
-    // 会员行是只读 span(不可展开),自定义行是 button——都带 title=原始名
-    const member = await screen.findByTitle("会员-高级");
-    expect(member.textContent).not.toMatch(/窗口|输出|支持图片|思考/);
-
-    // 反向锚:同样几项配在自定义条目上照旧展示(证明是按 source 分流,
-    // 不是把整个摘要删了)
-    const custom = await screen.findByTitle("自定义-同参数");
-    expect(custom.textContent).toMatch(/窗口/);
-    expect(custom.textContent).toMatch(/输出/);
-    expect(custom.textContent).toMatch(/支持图片/);
-    expect(custom.textContent).toMatch(/思考/);
-  });
-
-  it("添加模型:新行展开编辑,保存载荷含新条目", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: "添加模型" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "名称" }), "新模型");
-    // 四项必填(见下一条用例):只填名称的半成品现在拦在保存之前
-    await userEvent.type(screen.getByRole("textbox", { name: "接口地址" }), "https://api.example.com");
-    await userEvent.type(screen.getByLabelText("API Key"), "sk-test"); // type=password 无 textbox role
-    await userEvent.type(screen.getByRole("textbox", { name: "模型标识" }), "gpt-5");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    const models = (calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig).models;
-    expect(models.map((m) => m.name)).toEqual(["主力", "备用", "新模型"]);
-    expect(models.map((m) => m.default)).toEqual([true, false, false]);
-  });
-
-  // 旧 UI validateBeforeSave 第一段,ui-next 漏迁:isBlankModel 要求四项全空
-  // 才当"没加",所以半成品会一路落盘 —— 界面说保存成功、引擎白重启一次,
-  // 之后这条模型出现在 composer 选择器里,选中发消息必然失败
-  it("模型缺 API Key / 模型标识:拦在保存之前并说明,不写盘、不重启引擎", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: "添加模型" }));
-    await userEvent.type(screen.getByRole("textbox", { name: "名称" }), "半成品");
-    await userEvent.type(screen.getByRole("textbox", { name: "接口地址" }), "https://api.example.com");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-
-    expect((await screen.findByRole("alert")).textContent).toContain("半成品");
-    expect(calls.some((c) => c.cmd === "save_config")).toBe(false);
-  });
-
-  it("删除默认行:默认位回落到首行,保存载荷同步", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getAllByRole("button", { name: "删除" })[0]!);
-    expect(screen.queryByRole("button", { name: /主力/ })).toBeNull();
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    const models = (calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig).models;
-    expect(models).toEqual([
-      { name: "备用", provider: "openai", base_url: "https://b", api_key: "k2", model: "gpt", default: true },
-    ]);
-  });
-
-  it("高级字段:上下文窗口/最大输出/图片输入可改并进载荷", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    await userEvent.type(screen.getByRole("spinbutton", { name: "上下文窗口(token)" }), "128000");
-    await userEvent.type(screen.getByRole("spinbutton", { name: "最大输出(token)" }), "8000");
-    await userEvent.click(screen.getByRole("checkbox", { name: "支持图片" }));
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    const models = (calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig).models;
-    expect(models[0]).toMatchObject({ name: "主力", context_window: 128000, max_output: 8000, vision: true });
-  });
-
-  it("最大输出填大值(旧 UI 会拦的 10% 越界量):照常保存,不拦", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    await userEvent.type(screen.getByRole("spinbutton", { name: "最大输出(token)" }), "64000");
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    const models = (calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig).models;
-    expect(models[0]).toMatchObject({ max_output: 64000 });
-  });
-
-  it("设为默认:default 标记随行重算", async () => {
-    const { calls } = stubShell();
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: "设为默认" })); // 唯一非默认行(备用)
-    await userEvent.click(screen.getByRole("button", { name: "保存" }));
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    const models = (calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig).models;
-    expect(models.map((m) => [m.name, m.default])).toEqual([
-      ["主力", false],
-      ["备用", true],
-    ]);
-  });
 });
 
 describe("MCP 编辑(与模型同一份脏状态)", () => {
@@ -621,117 +323,6 @@ describe("MCP 编辑(与模型同一份脏状态)", () => {
     expect((calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig).mcp_servers).toEqual({
       fetch: { url: "https://mcp", headers: undefined },
     });
-  });
-});
-
-describe("模型分区的空组引导(旧 UI 随迁)", () => {
-  it("一个模型都没有:百智云组与自定义组仍在,各自给出「模型从哪来」", async () => {
-    stubShell({ config: { ...baseConfig, models: [] } });
-    render(<SettingsView onClose={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "模型" }));
-    // 未登录变体(baizhi_status 桩回 null)
-    expect(await screen.findByText(/登录百智云并同步后/)).toBeDefined();
-    expect(screen.getByText(/手工接入其他服务商的模型/)).toBeDefined();
-    expect(screen.getByRole("button", { name: "添加模型" })).toBeDefined();
-  });
-
-  it("已登录百智云但该组为空:引导改成「去账号页点同步」", async () => {
-    stubShell({
-      config: { ...baseConfig, models: [] },
-      extra: { baizhi_status: () => ({ logged_in: true, host: "baizhi.cloud" }) },
-    });
-    render(<SettingsView onClose={() => {}} />);
-    await userEvent.click(screen.getByRole("button", { name: "模型" }));
-    expect(await screen.findByText(/点「同步模型与 MCP」/)).toBeDefined();
-  });
-});
-
-describe("同步自动保存(旧 UI autoSaveDecision 随迁)", () => {
-  // 账号分区已登录 + 会员同步返回一条模型
-  const syncExtra = () => ({
-    mc_status: () => ({ logged_in: true, user: { name: "李四" } }),
-    baizhi_status: () => ({ logged_in: false, host: "baizhi.cloud" }),
-    mc_models_sync: () => ({
-      models: [{ name: "member-m", base_url: "https://m", api_key: "k", model: "mm", source: "monkeycode" }],
-    }),
-  });
-  const syncMemberModels = async () => {
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
-    await userEvent.click(await screen.findByRole("button", { name: "同步会员模型" }));
-  };
-
-  it("干净表单+无任务在跑:同步后直接 save_config,提示「已自动保存」", async () => {
-    const { calls } = stubShell({ extra: syncExtra() });
-    render(<SettingsView onClose={() => {}} />);
-    await openModels(); // 等配置载入(基线就绪)再去账号页
-    await syncMemberModels();
-    await waitFor(() => expect(calls.some((c) => c.cmd === "save_config")).toBe(true));
-    expect((await screen.findByText(/已获取 1 个会员模型/)).textContent).toContain("已自动保存");
-    // 载荷含同步条目(落盘名带 @monkeycode 来源后缀)
-    const saved = calls.find((c) => c.cmd === "save_config")?.args?.config as DesktopConfig;
-    expect(saved.models.some((m) => m.name.startsWith("member-m@"))).toBe(true);
-  });
-
-  it("保存在途时第二路同步落地:补存一轮把它写进去,不留给用户手点", async () => {
-    // 扫码登录的真实时序:百智云同步先落地起了保存(写盘+重启引擎数秒),
-    // 会员模型同步随后落在保存在途期。旧 UI 的补存循环漏迁时,第二路条目
-    // 就停在未保存态(2026-08-06 用户报障「扫码之后还要手动保存」)
-    const pending: Array<() => void> = [];
-    const model = (name: string) => ({ name, base_url: "https://m", api_key: "k", model: name, source: "monkeycode" });
-    let round = 0;
-    const { calls } = stubShell({
-      extra: {
-        mc_status: () => ({ logged_in: true, user: { name: "李四" } }),
-        baizhi_status: () => ({ logged_in: false, host: "baizhi.cloud" }),
-        // 第二次同步多回一条:草稿在保存在途期发生变化
-        mc_models_sync: () => ({ models: round++ === 0 ? [model("mem-a")] : [model("mem-a"), model("mem-b")] }),
-      },
-      save: () => new Promise<null>((res) => pending.push(() => res(null))),
-    });
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
-    const syncBtn = await screen.findByRole("button", { name: "同步会员模型" });
-    await userEvent.click(syncBtn);
-    await waitFor(() => expect(pending).toHaveLength(1)); // 第一路保存在途
-
-    await userEvent.click(await screen.findByRole("button", { name: "同步会员模型" }));
-    expect((await screen.findByText(/已获取 2 个会员模型/)).textContent).toContain("已自动保存");
-    expect(pending).toHaveLength(1); // 在途期不另起保存
-
-    await act(async () => pending[0]!()); // 第一路存完 → 补存循环发现草稿变了
-    await waitFor(() => expect(pending).toHaveLength(2));
-    await act(async () => pending[1]!());
-
-    const saves = calls.filter((c) => c.cmd === "save_config");
-    expect(saves).toHaveLength(2);
-    const names = (saves[1]!.args?.config as DesktopConfig).models.map((m) => m.name);
-    expect(names.some((n) => n.startsWith("mem-b@"))).toBe(true);
-    await waitFor(() => expect(screen.queryByRole("button", { name: "保存" })).toBeNull()); // 保存条自行收起
-  });
-
-  it("有任务在跑:不自动保存(重启引擎会踹掉任务),提示原因并留保存条", async () => {
-    const { calls } = stubShell({ extra: syncExtra() });
-    render(<SettingsView onClose={() => {}} hasRunningTask />);
-    await openModels();
-    await syncMemberModels();
-    expect((await screen.findByText(/已获取 1 个会员模型/)).textContent).toContain("有任务正在运行");
-    expect(calls.some((c) => c.cmd === "save_config")).toBe(false);
-    expect(screen.getByRole("button", { name: "保存" })).toBeDefined(); // 合并已入草稿,保存条兜底
-  });
-
-  it("脏表单:不自动保存(不捎带未确认的修改),提示原因", async () => {
-    const { calls } = stubShell({ extra: syncExtra() });
-    render(<SettingsView onClose={() => {}} />);
-    await openModels();
-    // 先弄脏表单
-    await userEvent.click(screen.getByRole("button", { name: /主力/ }));
-    const name = screen.getByRole("textbox", { name: "名称" });
-    await userEvent.clear(name);
-    await userEvent.type(name, "主力2");
-    await syncMemberModels();
-    expect((await screen.findByText(/已获取 1 个会员模型/)).textContent).toContain("未保存的修改");
-    expect(calls.some((c) => c.cmd === "save_config")).toBe(false);
   });
 });
 
@@ -1060,7 +651,7 @@ describe("外观设置:自定义背景内部编辑器", () => {
     await userEvent.click(screen.getByRole("button", { name: "更换图片" }));
     await waitFor(() => expect(calls.some((call) => call.cmd === "background_import")).toBe(true));
 
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
+    await userEvent.click(screen.getByRole("button", { name: "模型" }));
     await userEvent.click(screen.getByRole("button", { name: "通用" }));
     await userEvent.click(screen.getByRole("button", { name: "清除图片" }));
     await act(async () => resolveImport(stagedBackgroundAsset));
@@ -1105,7 +696,7 @@ describe("外观设置:自定义背景内部编辑器", () => {
     await userEvent.click(screen.getByRole("button", { name: "更换图片" }));
     await waitFor(() => expect(calls.some((call) => call.cmd === "background_confirm")).toBe(true));
 
-    await userEvent.click(screen.getByRole("button", { name: "账号" }));
+    await userEvent.click(screen.getByRole("button", { name: "模型" }));
     await userEvent.click(screen.getByRole("button", { name: "通用" }));
     await userEvent.click(screen.getByRole("button", { name: "清除图片" }));
     expect(calls.some((call) => call.cmd === "background_clear")).toBe(false);

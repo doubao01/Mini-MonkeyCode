@@ -118,6 +118,8 @@ export interface SplitCloudWiring {
   onChanged: () => void;
   /** 用户主动刷新任务、项目和已展开项目组。 */
   onRefresh: () => void;
+  /** 云端未连接时启动独立登录窗，不进入模型设置。 */
+  onConnect?: () => void;
 }
 
 /** 行政接线(任务列行右键/待办组;旧侧栏能力随壳退役迁入)。 */
@@ -1801,7 +1803,7 @@ function WorkbenchList({
             reloadKey={cloud.reloadKey}
             refreshKey={cloud.refreshKey}
             onDeleted={cloud.onDeleted}
-            onOpenSettings={onOpenSettings}
+            onOpenSettings={cloud.onConnect ?? onOpenSettings}
             onRefresh={cloud.onRefresh}
             onNewTaskIn={(project) => onNewCloudIn(project)}
             onTaskDragStart={(e, task) => {
