@@ -269,6 +269,41 @@ describe("useComposer 本地持久 lane", () => {
     expect(sends(calls)).toHaveLength(0);
   });
 
+  it("队列已有一条处于 awaiting-turn-end 的在途消息时，仍可对后续待发送项立即发送", async () => {
+    const calls = stubShell((cmd) => {
+      if (cmd === "engine_caps") return { steering: true };
+      return null;
+    });
+    const { result, rerender } = renderHook(
+      ({ running, lastSeq, lastTurnStartSeq }) => useComposer("a", feed({ running, lastSeq, lastTurnStartSeq })),
+      { initialProps: { running: true, lastSeq: 0, lastTurnStartSeq: 0 } },
+    );
+    await waitFor(() => expect(result.current.steeringSupported).toBe(true));
+
+    // 运行时排队的第一条在闲置档被补投，随开轮回执进入 awaiting-turn-end。
+    act(() => result.current.setDraft("第一条"));
+    act(() => result.current.send());
+    rerender({ running: false, lastSeq: 0, lastTurnStartSeq: 0 });
+    await waitFor(() => expect(sends(calls)).toHaveLength(1));
+    rerender({ running: true, lastSeq: 1, lastTurnStartSeq: 1 });
+    await waitFor(() => expect(result.current.queue.inFlight?.phase).toBe("awaiting-turn-end"));
+
+    // 这一轮确实是 Agent 在跑；此刻排队第二条并点「立即发送」必须真的下发。
+    act(() => result.current.setDraft("第二条"));
+    act(() => result.current.send());
+    const id = result.current.queue.pending[0]!.id;
+    act(() => result.current.steerQueued(id));
+
+    await waitFor(() =>
+      expect(calls.some((call) => call.cmd === "session_call" && call.args?.kind === "session_steer")).toBe(true),
+    );
+    expect(result.current.queue.pending).toEqual([]);
+    // stub 应答即到,条目推进到 acked;两种相位都代表已离开 pending。
+    expect(result.current.queue.steering?.[0]?.item.id).toBe(id);
+    expect(result.current.queue.steering?.[0]?.phase).not.toBe("uncertain");
+    expect(result.current.error).toBeNull();
+  });
+
   it("同一归约批次的两个 confirmed 分别清除两条 acked outbox", async () => {
     const target = localSendQueueTarget("a");
     const a = createSendQueueItem("补充 A", [], { id: "client-a", createdAt: 1 });

@@ -345,6 +345,10 @@ export function reorderBefore<A>(
   return { ...lane, pending: next };
 }
 
+/** 投递尚未落定:此刻追加 steering 会与在途的 user-input 抢同一轮。 */
+const laneDelivering = (inFlight: SendQueueInFlight<unknown> | null): boolean =>
+  inFlight !== null && inFlight.phase !== "awaiting-turn-end";
+
 /** 仅在未阻塞、无普通 in-flight 且没有未丢弃 steering outbox 时领取队首。 */
 export function claimHead<A>(lane: SendQueueLane<A>, metadata: ClaimMetadata = {}): SendQueueLane<A> {
   assertSendQueueLane(lane);
@@ -365,7 +369,10 @@ export function claimHead<A>(lane: SendQueueLane<A>, metadata: ClaimMetadata = {
   return { ...lane, pending: lane.pending.slice(1), inFlight };
 }
 
-/** 一次状态转换中把指定 pending 项移入 durable steering outbox。 */
+/** 一次状态转换中把指定 pending 项移入 durable steering outbox。
+ * inFlight 不构成门禁:开启本轮的那条消息在整轮执行期间都停在
+ * awaiting-turn-end,而队尾消息要插入的恰恰是这一轮。只有投递尚未落定
+ * (dispatching/awaiting-receipt)或结果不确定时才不能追加。 */
 export function claimSteering<A>(
   lane: SendQueueLane<A>,
   itemId: string,
@@ -376,7 +383,7 @@ export function claimSteering<A>(
   if (
     originalIndex < 0 ||
     lane.editing !== undefined ||
-    lane.inFlight !== null ||
+    laneDelivering(lane.inFlight) ||
     (lane.steering ?? []).some((entry) => entry.phase === "dispatching")
   ) return lane;
   const item = lane.pending[originalIndex];

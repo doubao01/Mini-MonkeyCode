@@ -289,9 +289,35 @@ describe("send queue pure transitions", () => {
     expect(claimHead(withNewPending, { startedAt: 102 }).inFlight?.item.id).toBe("explicit-new");
   });
 
-  it("普通 inFlight 会拒绝 steering claim", () => {
-    const ordinary = claimHead(laneOf(item("a"), item("b")), { startedAt: 100 });
-    expect(claimSteering(ordinary, "b", 101)).toBe(ordinary);
+  it("投递尚未落定的 inFlight 会拒绝 steering claim", () => {
+    const dispatching = claimHead(laneOf(item("a"), item("b")), { startedAt: 100 });
+    expect(claimSteering(dispatching, "b", 101)).toBe(dispatching);
+
+    const awaitingReceipt = claimHead(laneOf(item("a"), item("b")), {
+      startedAt: 100,
+      phase: "awaiting-receipt",
+    });
+    expect(claimSteering(awaitingReceipt, "b", 101)).toBe(awaitingReceipt);
+
+    const uncertain = markUncertain(claimHead(laneOf(item("a"), item("b")), { startedAt: 100 }));
+    expect(claimSteering(uncertain, "b", 101)).toBe(uncertain);
+  });
+
+  it("开轮确认后的 inFlight 不阻止 steering:整轮执行期间它一直停在 awaiting-turn-end", () => {
+    // 队列投递的那条在 Agent 执行期间一直是 awaiting-turn-end,后续项插的正是这一轮。
+    const runningTurn = markReceipt(claimHead(laneOf(item("a"), item("b")), { startedAt: 100 }), "a");
+    expect(runningTurn.inFlight?.phase).toBe("awaiting-turn-end");
+
+    const steered = claimSteering(runningTurn, "b", 101);
+    expect(steered).not.toBe(runningTurn);
+    // b 已离开 pending 进入 outbox;在途项 a 仍归 inFlight 管。
+    expect(idsOf(steered)).toEqual([]);
+    expect(steered.inFlight?.item.id).toBe("a");
+    expect(steered.steering).toEqual([
+      { item: item("b"), phase: "dispatching", startedAt: 101, originalIndex: 0 },
+    ]);
+    // 在途项本身不受影响,仍由本轮结束完成。
+    expect(completeTurn(steered, "a").inFlight).toBeNull();
   });
 
   it("returns a rejected in-flight item to the head and blocks later items", () => {
