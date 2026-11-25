@@ -12,6 +12,9 @@ on:
 permissions:
   contents: read
 
+env:
+  PYTHONUTF8: "1"
+
 concurrency:
   group: mini-desktop-windows-${{ github.ref }}
   cancel-in-progress: true
