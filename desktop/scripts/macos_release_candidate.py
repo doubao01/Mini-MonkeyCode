@@ -24,7 +24,7 @@ INPUTS = (
     ROOT / "binaries/ohmyagent-universal-apple-darwin",
     ROOT / "uidist",
     ROOT.parent / "browser-extension/dist",
-    ROOT.parent.parent / "skills",
+    ROOT.parent / "plugins/skills",
     ROOT / "icons/icon.icns",
     ROOT / "icons/icon.png",
     ROOT / "Info.plist",

@@ -10,7 +10,7 @@
     ],
     "resources": {
       "../browser-extension/dist": "browser-extension",
-      "../../skills": "skills"
+      "../plugins/skills": "skills"
     },
     "icon": [
       "icons/icon.icns",

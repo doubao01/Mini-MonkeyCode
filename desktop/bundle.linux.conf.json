@@ -12,7 +12,7 @@
     ],
     "resources": {
       "../browser-extension/dist": "browser-extension",
-      "../../skills": "skills"
+      "../plugins/skills": "skills"
     },
     "icon": [
       "icons/32x32.png",

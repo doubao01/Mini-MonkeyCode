@@ -128,7 +128,7 @@ pub struct SkillInfo {
     pub default_enabled: bool,
 }
 
-/// 内置技能目录候选(按优先级):bundle resources -> exe 同目录 skills/ -> dev 仓库根。
+/// 内置技能目录候选(按优先级):bundle resources -> exe 同目录 skills/ -> dev 仓库根 plugins/skills。
 /// `--no-bundle` 绿色版把 skills/ 与 exe 并列分发,因此必须含 exe 同目录候选;
 /// 全部落空回 None = 只有用户技能。
 pub fn builtin_dir(app: &AppHandle) -> Option<PathBuf> {
@@ -144,7 +144,7 @@ pub fn builtin_dir(app: &AppHandle) -> Option<PathBuf> {
             candidates.push(dir.join("skills"));
         }
     }
-    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../skills"));
+    candidates.push(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../plugins/skills"));
     candidates.into_iter().find(|p| p.is_dir())
 }
 
